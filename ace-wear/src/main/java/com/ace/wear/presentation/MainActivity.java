@@ -1,14 +1,14 @@
 package com.ace.wear.presentation;
 
+import android.app.Activity;
 import android.os.Bundle;
-import androidx.activity.ComponentActivity;
-import androidx.wear.activity.EmbeddedScrollingActivity;
+import com.ace.wear.R;
 
-public class MainActivity extends ComponentActivity {
+public class MainActivity extends Activity {
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // TODO: Set Wear Compose content
         setContentView(R.layout.activity_main);
     }
 }
