@@ -1,0 +1,9 @@
+# A.C.E Code Owners
+# Quién debe revisar PRs en cada ruta
+
+ace-backend/**    @reinaldo @santiago
+ace-mobile/**     @steven-araque
+ace-wear/**       @steven-araque
+ace-shared/**     @steven-araque @reinaldo @santiago
+.github/**        @steven-araque
+README.md         @steven-araque

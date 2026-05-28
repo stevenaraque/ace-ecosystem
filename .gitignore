@@ -1,0 +1,33 @@
+# Global A.C.E Monorepo
+# Java / Gradle
+**/build/
+**/.gradle/
+**/gradle/wrapper/gradle-wrapper.jar
+**/gradlew
+**/gradlew.bat
+!gradle/wrapper/gradle-wrapper.properties
+
+# IDEs
+**/.idea/
+**/*.iml
+**/.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+**/.env
+**/application-local.yml
+**/application-local.properties
+
+# Android
+**/local.properties
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+*.apk
+*.aab
+
+# Backend
+**/target/

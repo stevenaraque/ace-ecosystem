@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: ace-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ace_db
+    username: ace
+    password: ace
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+jwt:
+  secret: ${JWT_SECRET:ace-super-secret-key-debe-cambiarse-en-produccion-2026}
+  access-token-expiration: 900000      # 15 minutos en ms
+  refresh-token-expiration: 604800000  # 7 días en ms
+
+logging:
+  level:
+    com.ace.backend: DEBUG
