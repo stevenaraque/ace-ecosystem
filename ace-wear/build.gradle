@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.application' version '8.4.0'
 }
 
 android {
@@ -28,19 +28,7 @@ android {
 
 dependencies {
     implementation 'androidx.wear:wear:1.3.0'
-    implementation 'androidx.wear.compose:compose-material:1.3.1'
-    implementation 'androidx.wear.compose:compose-foundation:1.3.1'
-
-    // Health Services API (Wear OS 3+)
     implementation 'androidx.health:health-services-client:1.0.0-rc02'
-
-    // Wearable Data Layer (sincronización con móvil)
     implementation 'com.google.android.gms:play-services-wearable:18.1.0'
-
-    // Lifecycle
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.0'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.0'
-
-    // A.C.E Shared (opcional en wear; estructura lista)
-    // implementation files('../ace-shared/build/libs/ace-shared-1.0.0-SNAPSHOT.jar')
 }

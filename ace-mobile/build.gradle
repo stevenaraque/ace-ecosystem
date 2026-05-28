@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.application'
+    id 'com.android.application' version '8.4.0'
 }
 
 android {
@@ -30,25 +30,11 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-
-    // Wear OS Data Layer (sincronización con reloj)
     implementation 'com.google.android.gms:play-services-wearable:18.1.0'
-
-    // Network
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-moshi:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
-
-    // DI (Hilt) — estructura lista, se activa cuando agregues el plugin
-    // implementation 'com.google.dagger:hilt-android:2.51'
-    // annotationProcessor 'com.google.dagger:hilt-compiler:2.51'
-
-    // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
-
-    // WorkManager
     implementation 'androidx.work:work-runtime:2.9.0'
-
-    // A.C.E Shared
     implementation files('../ace-shared/build/libs/ace-shared-1.0.0-SNAPSHOT.jar')
 }
