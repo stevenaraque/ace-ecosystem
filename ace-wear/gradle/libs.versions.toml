@@ -1,32 +1,47 @@
 [versions]
 agp = "9.0.1"
-playServicesWearable = "18.0.0"
 kotlin = "2.0.21"
-composeBom = "2024.09.00"
-composeMaterial3 = "1.5.6"
-composeFoundation = "1.5.6"
-composeUiTooling = "1.5.6"
-wearToolingPreview = "1.0.0"
+playServicesWearable = "18.2.0"
+healthServices = "1.0.0"
+composeBom = "2026.05.00"
 activityCompose = "1.13.0"
 coreSplashscreen = "1.2.0"
 
 [libraries]
+# === Wear OS: Comunicación con móvil ===
 play-services-wearable = { group = "com.google.android.gms", name = "play-services-wearable", version.ref = "playServicesWearable" }
+
+# === Wear OS: Health Services (sensor FC) ===
+health-services-client = { group = "androidx.health", name = "health-services-client", version.ref = "healthServices" }
+
+# === Compose BOM (maneja versiones de ui, material, etc.) ===
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+
+# === Compose UI (versiones controladas por BOM) ===
 ui = { group = "androidx.compose.ui", name = "ui" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-compose-material3 = { group = "androidx.wear.compose", name = "compose-material3", version.ref = "composeMaterial3" }
-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "composeFoundation" }
-compose-ui-tooling = { group = "androidx.wear.compose", name = "compose-ui-tooling", version.ref = "composeUiTooling" }
-wear-tooling-preview = { group = "androidx.wear", name = "wear-tooling-preview", version.ref = "wearToolingPreview" }
+
+# === Wear Compose (NO usar androidx.compose.material3, es para móvil) ===
+# Wear Compose Foundation - versión 1.6.2 estable (junio 2026)
+wear-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version = "1.6.2" }
+# Wear Compose Material (Material2 para Wear OS)
+wear-compose-material = { group = "androidx.wear.compose", name = "compose-material", version = "1.6.2" }
+# Wear Compose Material3 (experimental, usar con cuidado)
+wear-compose-material3 = { group = "androidx.wear.compose", name = "compose-material3", version = "1.0.0-alpha34" }
+
+# === Tooling para previews en Wear OS ===
+wear-tooling-preview = { group = "androidx.wear", name = "wear-tooling-preview", version = "1.0.0" }
+
+# === Activity Compose ===
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+
+# === Splashscreen ===
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-
