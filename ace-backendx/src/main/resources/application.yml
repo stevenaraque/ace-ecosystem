@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: ace-backend
+
+  datasource:
+    # Supabase Connection Pooler (modo transaccional)
+    url: jdbc:postgresql://aws-1-us-east-2.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require
+    username: postgres.artujprgqdhhtkwcisxv
+    password: ACEpass69**ACE
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 20000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # Flyway crea el schema; JPA solo valida
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    org.springframework.security: DEBUG

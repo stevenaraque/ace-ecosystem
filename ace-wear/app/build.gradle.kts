@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.legacy.kapt)        // ← NUEVO: com.android.legacy-kapt
+    alias(libs.plugins.hilt.android)       // ← NUEVO
 }
 
 android {
@@ -13,11 +15,10 @@ android {
 
     defaultConfig {
         applicationId = "sena.adso.ace_wear"
-        minSdk = 33
+        minSdk = 30
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
     }
 
     buildTypes {
@@ -29,39 +30,58 @@ android {
             )
         }
     }
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
-    useLibrary("wear-sdk")
+
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
-    // Wear OS: Health Services (obligatorio para A.C.E)
-    implementation(libs.health.services.client)
+    // Kotlin & Corrutinas
+    implementation(libs.kotlin.stdlib)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
 
-    // Wear OS: Data Layer
+    // Wear OS Core
+    implementation(libs.core.ktx)
+    implementation(libs.wear)
+
+    // Health & Data
+    implementation(libs.health.services.client)
     implementation(libs.play.services.wearable)
 
-    // Compose BOM
+    // Compose (BOM)
     implementation(platform(libs.compose.bom))
-
-    // Compose UI (versiones del BOM)
     implementation(libs.ui)
     implementation(libs.ui.graphics)
     implementation(libs.ui.tooling.preview)
     debugImplementation(libs.ui.tooling)
 
-    // Wear Compose (NO usar material3 de móvil)
+    // Wear Compose
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.material)
-    // implementation(libs.wear.compose.material3) // Solo si necesitas Material3 experimental
+
+    // Lifecycle (MVVM)
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.viewmodel.ktx)
+    implementation(libs.lifecycle.service)
+
+    // Hilt (DI) — usando legacy-kapt
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)               // ← kapt() funciona con legacy-kapt
 
     // Tooling
     implementation(libs.wear.tooling.preview)
     implementation(libs.activity.compose)
     implementation(libs.core.splashscreen)
+
+    // Testing
+    testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -1,5 +1,7 @@
 -- ============================================================
 -- A.C.E Backend — V1: Esquema base (Auth, Exercise, Streak, Formulas)
+-- CORREGIDO: Añade PAUSED a exercise_sessions, weight/birth_date a user_profiles
+-- Añade tablas de auditoría vacías para MVP
 -- ============================================================
 
 -- Extensión UUID
@@ -29,11 +31,14 @@ CREATE TABLE refresh_tokens (
 CREATE INDEX idx_refresh_tokens_hash ON refresh_tokens(token_hash);
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id, device_id);
 
--- 3. USER PROFILES (Apéndice S10)
+-- 3. USER PROFILES (Apéndice S10) — CORREGIDO: añade weight, birth_date, nickname
 CREATE TABLE user_profiles (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     username VARCHAR(255),
+    nickname VARCHAR(255),              -- Alias alternativo (coherencia con plan)
     city_id VARCHAR(255),
+    weight_kg DECIMAL(5,2),             -- Peso en kilogramos
+    birth_date DATE,                    -- Fecha de nacimiento
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -57,11 +62,11 @@ CREATE TABLE user_streaks (
     last_exercise_date DATE
 );
 
--- 6. EXERCISE SESSIONS (Apéndice S2/S3)
+-- 6. EXERCISE SESSIONS (Apéndice S2/S3) — CORREGIDO: incluye PAUSED
 CREATE TABLE exercise_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status VARCHAR(50) NOT NULL CHECK (status IN ('ACTIVE', 'COMPLETED', 'ABORTED')),
+    status VARCHAR(50) NOT NULL CHECK (status IN ('ACTIVE', 'PAUSED', 'COMPLETED', 'ABORTED')),
     sport_type VARCHAR(50) NOT NULL,
     timestamp_start TIMESTAMPTZ NOT NULL,
     timestamp_end TIMESTAMPTZ,
@@ -111,3 +116,25 @@ CREATE TABLE rank_catalog (
     max_xp INT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 10. TABLAS DE AUDITORÍA (vacías en MVP — listas para máximo)
+CREATE TABLE suspicion_audit (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    block_id UUID REFERENCES exercise_blocks(id) ON DELETE SET NULL,
+    reason VARCHAR(255) NOT NULL,
+    confidence_score DECIMAL(3,2),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE session_gps_points (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID NOT NULL REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+    latitude DECIMAL(10, 8) NOT NULL,
+    longitude DECIMAL(11, 8) NOT NULL,
+    accuracy_meters DECIMAL(6,2),
+    timestamp TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_gps_session ON session_gps_points(session_id, timestamp);
