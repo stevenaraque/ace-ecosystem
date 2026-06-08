@@ -61,16 +61,9 @@ publishing {
     publications {
         create<MavenPublication>("maven") {
             from(components["java"])
-        }
-    }
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/tu-org/ace-shared")
-            credentials {
-                username = System.getenv("GITHUB_ACTOR")
-                password = System.getenv("GITHUB_TOKEN")
-            }
+            groupId = group.toString()
+            artifactId = "shared"  // Esto será parte del nombre final
+            version = version.toString()
         }
     }
 }
