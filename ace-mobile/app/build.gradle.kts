@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         applicationId = "sena.adso.ace_mobile"
-        minSdk = 33
+        minSdk = 30
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -25,7 +25,7 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true          // ← Plan v3.0 habilita ProGuard
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -34,12 +34,9 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21   // ← CORREGIDO: 11 → 21
+        sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-
-    // AGP 9.0 built-in Kotlin: kotlinOptions y composeOptions YA NO SON NECESARIOS
-    // El plugin kotlin-compose gestiona el compiler automáticamente
 
     buildFeatures {
         compose = true
@@ -52,9 +49,11 @@ android {
     }
 }
 
+// ❌ NO añadir repositories aquí — va en settings.gradle.kts
+
 dependencies {
-    // ─── :shared (descomenta si aplica) ───
-    // implementation(project(":shared"))
+    // ─── :shared vía JitPack ───
+    implementation(libs.ace.shared)
 
     // ─── Kotlin & Corrutinas ───
     implementation(libs.kotlin.stdlib)
@@ -96,7 +95,7 @@ dependencies {
     // ─── Retrofit & OkHttp ───
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.okhttp)                 // ← AÑADIDO: core de OkHttp
+    implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
     // ─── Hilt (DI) ───

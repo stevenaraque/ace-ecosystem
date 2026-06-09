@@ -1,10 +1,10 @@
 # A.C.E — Implementation Plan: Backend (`ace-backend`)
 
 > **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.2  
-> **Versión:** 4.0 (Actualizado a Spring Boot 4.0 + Kotlin 2.2 + compilerOptions DSL)  
+> **Versión:** 4.1 (Actualizado: JitPack para :shared, Spring Boot 4.0.6, Kotlin 2.2.21)  
 > **Fecha:** Junio 2026  
 > **Stack:** Spring Boot 4.0.6 · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · PostgreSQL 16 · Flyway 10.15 · kotlinx-serialization  
-> **Depende de:** `:shared` JAR v1.0.0+  
+> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.0+ (JitPack)  
 > **Responsables:** Reinaldo, Santiago (Backend)
 
 ---
@@ -24,6 +24,8 @@ El backend es la **única fuente de verdad** para:
 
 **Regla de oro:** El backend **NUNCA** recalcula XP desde cero. Solo valida que la XP reportada por el móvil sea consistente con las métricas del bloque (S5 §4.1).
 
+**Nota sobre :shared:** El backend consume el módulo `:shared` vía **JitPack** como artifact Maven externo. No se incluye como `project(":shared")` ni como JAR local en `libs/`. La coordenada exacta es `com.github.reinaldojperalta:ace-shared`.
+
 ---
 
 ## 2. Dependencias Gradle (`build.gradle.kts`)
@@ -40,7 +42,6 @@ plugins {
     kotlin("plugin.spring") version "2.2.21"
     kotlin("plugin.jpa") version "2.2.21"
     kotlin("plugin.serialization") version "2.2.21"
-    id("org.flywaydb.flyway") version "10.15.0"
     `maven-publish`
 }
 
@@ -55,20 +56,14 @@ java {
 repositories {
     mavenCentral()
     maven { url = uri("https://repo.spring.io/milestone") }
-    // GitHub Packages para :shared
-    maven {
-        name = "GitHubPackages"
-        url = uri("https://maven.pkg.github.com/tu-org/ace-shared")
-        credentials {
-            username = System.getenv("GITHUB_ACTOR")
-            password = System.getenv("GITHUB_TOKEN")
-        }
-    }
+    // ✅ JitPack para :shared (repo separado reinaldojperalta/ace-shared)
+    maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
-    // ─── Módulo :shared ───
-    implementation("com.ace:shared:1.0.0")
+    // ─── :shared vía JitPack ───
+    // Coordenada exacta: JitPack sobrescribe group a com.github.reinaldojperalta
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
 
     // ─── Spring Boot Starters ───
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -76,7 +71,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
-    implementation("org.springframework.boot:spring-boot-starter-kotlin-serialization")
+    implementation("org.springframework.boot:spring-boot-starter-kotlinx-serialization-json")
 
     // ─── Kotlin ───
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -114,6 +109,7 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:1.19.8")
     testImplementation("org.testcontainers:postgresql:1.19.8")
     testImplementation("org.assertj:assertj-core:3.26.3")
+    testImplementation("com.h2database:h2")
 }
 
 // ✅ compilerOptions DSL (Kotlin 2.2+ — reemplaza kotlinOptions deprecado)
@@ -130,48 +126,36 @@ kotlin {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
-
-// ─── Flyway Config ───
-flyway {
-    url = "jdbc:postgresql://localhost:5432/ace_db"
-    user = "ace_user"
-    password = "ace_password"
-    locations = arrayOf("filesystem:src/main/resources/db/migration")
-}
 ```
 
-### 2.2. Notas críticas sobre Spring Boot 4.0 + Kotlin 2.2
+### 2.2. Notas críticas sobre Spring Boot 4.0 + Kotlin 2.2 + JitPack
 
-| Aspecto | Pre-Spring Boot 4.0 (plan v3.0) | Spring Boot 4.0 (plan v4.0) | Justificación |
-|---------|-------------------------------|-------------------------------|---------------|
-| **Spring Boot** | 3.3.2 | **4.0.6** | Última estable (abril 2026). Soporte hasta dic 2026. |
-| **Kotlin** | 2.1.0 | **2.2.21** | **Baseline obligatorio** de Spring Boot 4.0. No se puede usar 2.1.x. |
-| **Plugin Kotlin JVM** | `kotlin("jvm")` | `kotlin("jvm")` (mantenido) | Versión actualizada a 2.2.21. |
-| **Plugin Kotlin Spring** | `kotlin("plugin.spring")` | `kotlin("plugin.spring")` (mantenido) | Versión actualizada a 2.2.21. |
-| **Plugin Kotlin JPA** | `kotlin("plugin.jpa")` | `kotlin("plugin.jpa")` (mantenido) | Versión actualizada a 2.2.21. |
-| **Plugin Kotlin Serialization** | No usado | **`kotlin("plugin.serialization")`** | Soporte nativo de kotlinx-serialization en Spring Boot 4.0. |
-| **Spring Dependency Management** | 1.1.6 | **1.1.7** | Última estable (diciembre 2024). |
-| **Moshi** | 1.15.1 | **Eliminado** | Reemplazado por Gson + kotlinx-serialization (coherente con mobile). |
-| **Gson** | No usado | **Usado** | Coherente con mobile (`retrofit-converter-gson`). |
-| **kotlinx-serialization** | No usado | **`spring-boot-starter-kotlin-serialization`** | Starter nativo de Spring Boot 4.0. |
-| **`kotlinOptions { jvmTarget }`** | `"21"` | **Eliminado** | Deprecado en Kotlin 2.2. Se usa `compilerOptions` DSL. |
-| **`compilerOptions` DSL** | No existía | **`kotlin { compilerOptions { ... } }`** | Nuevo DSL obligatorio en Kotlin 2.2+. |
-| **`JvmTarget.JVM_21`** | No usado | **`jvmTarget.set(JvmTarget.JVM_21)`** | API tipada para especificar target JVM. |
-| **Java** | 21 | **21** (mantenido) | Compatible con Spring Boot 4.0. |
-| **Flyway** | 10.15.0 | **10.15.0** (mantenido) | Conservado como requerido. |
+| Aspecto | Pre-Spring Boot 4.0 (plan v3.0) | Spring Boot 4.0 (plan v4.0) | v4.1 (JitPack) | Justificación |
+|---------|-------------------------------|-------------------------------|----------------|---------------|
+| **:shared** | `project(":shared")` | `files("libs/ace-shared.jar")` | **JitPack `com.github.reinaldojperalta:ace-shared`** | Repo separado, compilación automática, sin fricción de JAR manual. |
+| **Repositorios** | mavenCentral + GitHub Packages | mavenCentral + flatDir | **mavenCentral + JitPack** | JitPack no requiere PAT para consumir. |
+| **Spring Boot** | 3.3.2 | **4.0.6** | 4.0.6 | Última estable (abril 2026). Soporte hasta dic 2026. |
+| **Kotlin** | 2.1.0 | **2.2.21** | 2.2.21 | Baseline obligatorio de Spring Boot 4.0. |
+| **Plugin Kotlin JVM** | `kotlin("jvm")` | `kotlin("jvm")` (mantenido) | `kotlin("jvm")` | Versión actualizada a 2.2.21. |
+| **Plugin Kotlin Spring** | `kotlin("plugin.spring")` | `kotlin("plugin.spring")` (mantenido) | `kotlin("plugin.spring")` | Versión actualizada a 2.2.21. |
+| **Plugin Kotlin JPA** | `kotlin("plugin.jpa")` | `kotlin("plugin.jpa")` (mantenido) | `kotlin("plugin.jpa")` | Versión actualizada a 2.2.21. |
+| **Plugin Kotlin Serialization** | No usado | **`kotlin("plugin.serialization")`** | `kotlin("plugin.serialization")` | Soporte nativo de kotlinx-serialization en Spring Boot 4.0. |
+| **Spring Dependency Management** | 1.1.6 | **1.1.7** | 1.1.7 | Última estable (diciembre 2024). |
+| **Moshi** | 1.15.1 | **Eliminado** | Eliminado | Reemplazado por Gson + kotlinx-serialization. |
+| **Gson** | No usado | **Usado** | Usado | Coherente con mobile (`retrofit-converter-gson`). |
+| **kotlinx-serialization** | No usado | **`spring-boot-starter-kotlinx-serialization-json`** | `spring-boot-starter-kotlinx-serialization-json` | Starter nativo de Spring Boot 4.0. |
+| **`kotlinOptions { jvmTarget }`** | `"21"` | **Eliminado** | Eliminado | Deprecado en Kotlin 2.2. Se usa `compilerOptions` DSL. |
+| **`compilerOptions` DSL** | No existía | **`kotlin { compilerOptions { ... } }`** | `kotlin { compilerOptions { ... } }` | Nuevo DSL obligatorio en Kotlin 2.2+. |
+| **`JvmTarget.JVM_21`** | No usado | **`jvmTarget.set(JvmTarget.JVM_21)`** | `jvmTarget.set(JvmTarget.JVM_21)` | API tipada para especificar target JVM. |
+| **Java** | 21 | **21** (mantenido) | 21 | Compatible con Spring Boot 4.0. |
+| **Flyway** | 10.15.0 | **10.15.0** (mantenido) | 10.15.0 | Conservado como requerido. |
+| **H2** | No usado | No usado | **Añadido en tests** | Para tests unitarios rápidos sin Docker. Opcional. |
 
 ---
 
 ## 3. Arquitectura y Patrones (Coherente con Arquitectura §2.1)
 
-| Patrón | Dónde vive | Justificación | Coherencia con Apéndice |
-|--------|-----------|---------------|------------------------|
-| **DTO** | Consumido vía `:shared` | Contrato inmutable. Breaking change rompe compilación en ambos lados. | S3, S5, S10 |
-| **Repository** | `repository/` | Abstrae PostgreSQL. Cambio de DB sin tocar servicios. | S3, S6, S10 |
-| **Strategy** | `service/validation/` | Cada deporte tiene su propio **validador** de XP (no calculador). | S5 §4.3 |
-| **Singleton** | `JwtService`, configuraciones Spring | Tokens sin side-effects. Spring gestiona ciclo de vida. | S4 §2.2 |
-| **Observer** | `scheduler/` + EventListeners | Ranking recalculado por job, no on-write. | S6 §2.1 |
-| **Layered Architecture** | Controller → Service → Repository → Domain | Controllers solo deserializan y delegan. | Todos |
+[Idéntico a v4.0]
 
 ---
 
@@ -252,7 +236,7 @@ ace-backend/
 │   │   ├── UserController.kt               # GET /api/user/profile, /stats
 │   │   └── XpFormulaController.kt          # GET /api/xp/formulas (S5 §2.3)
 │   │
-│   ├── dto/                                # NO USAR — todos los DTOs vienen de :shared
+│   ├── dto/                                # NO USAR — todos los DTOs vienen de :shared vía JitPack
 │   │   └── [vacío — importar desde com.ace.shared.dto.*]
 │   │
 │   ├── security/
@@ -290,102 +274,7 @@ ace-backend/
 
 ## 5. Flujos de Datos Conceptuales (Coherentes con Apéndices)
 
-### 5.1 Autenticación JWT Híbrida (S4)
-
-```kotlin
-// Login → AuthService valida BCrypt → emite access_token (15 min) + refresh_token (7 días)
-// → persiste hash de refresh en PostgreSQL con token_id UUID
-// → responde AuthResponseDto (de :shared)
-
-// Refresh:
-// 1. Mobile envía POST /api/auth/refresh con RefreshTokenRequestDto
-// 2. RefreshTokenService ejecuta SELECT FOR UPDATE (S4 §6.3):
-//    BEGIN;
-//    SELECT * FROM refresh_tokens WHERE token_hash = ? FOR UPDATE;
-//    -- Verificar no revocado, no expirado, device_id coincide
-//    UPDATE refresh_tokens SET revoked_at = now(), replaced_by = ? WHERE id = ?;
-//    INSERT INTO refresh_tokens (token_hash, user_id, device_id, expires_at) VALUES (?, ?, ?, ?);
-//    COMMIT;
-// 3. Si segundo refresh concurrente: ve token revocado → 401 REFRESH_REUSED
-// 4. Emite nuevo par access + refresh
-// 5. Mobile guarda nuevos tokens
-
-// Logout:
-// 1. POST /api/auth/logout con refresh token
-// 2. Marca refresh como revocado (revoked_at = now())
-// 3. Access token sigue válido hasta expirar (15 min), aceptable en MVP
-```
-
-### 5.2 Recepción y Validación de Bloques (S3, S5)
-
-```kotlin
-// POST /api/exercise/blocks
-// Body: SyncBatchRequestDto (de :shared)
-//
-// 1. JwtAuthenticationFilter valida access token (stateless)
-// 2. ExerciseController deserializa SyncBatchRequestDto
-// 3. BlockProcessingService:
-//    a. Valida batch size ≤ 20 (SyncConstants.BATCH_MAX_SIZE). Si > 20 → 400 Bad Request.
-//    b. Para cada ExerciseBlockDto:
-//       - Valida schemaVersion (actual = 1). Si no coincide → 422.
-//       - Valida duración: 270 ≤ duration_seconds ≤ 330. Si no → 422.
-//       - Valida avg_bpm: 30 ≤ avg_bpm ≤ 250. Si no → 422.
-//       - Valida sample_count coherente con duration. Si no → 422.
-//       - Delega a XpValidationService (Strategy por sport_type):
-//         * RunningXpValidator: verifica que xp_calculated ≤ (duration/60) * xp_per_minute
-//         * Verifica que xp_calculated ≤ max_xp_per_block
-//         * Si xp_calculated > fórmula actual → 422 (posible trampa)
-//         * Si xp_calculated < fórmula actual → ACEPTA (móvil tenía fórmula vieja)
-//       - Si pasa validación: inserta exercise_blocks con ON CONFLICT (id) DO NOTHING (idempotencia)
-//       - Inserta xp_transaction con amount = xp_calculated, balance_after recalculado (S5 §5.2)
-//       - Evalúa racha: StreakEvaluationService compara timestamp_start con last_exercise_date (S7 §2.3)
-//       - Evalúa rango: RankService verifica si total_xp cruza umbral (S5 §7)
-//    c. Valida consistencia de client_stats (S10 §4.2):
-//       - total_xp reportado ≤ suma de amount en xp_transactions + bloques en vuelo
-//       - total_sessions reportado ≤ sesiones distintas en bloques SYNCED
-//       - Si discrepancia > margen: responde official_stats con corrección
-// 4. Responde lista de XpAwardedResponseDto (uno por bloque):
-//    - xpAccepted, newTotalXp, rankChanged, currentStreak, lastExerciseDate, bestStreak, correctionApplied
-```
-
-### 5.3 Recálculo de Ranking (S6)
-
-```kotlin
-// @Scheduled(cron = "0 0 * * * *") — cada hora
-// RankingService:
-// 1. Consulta xp_transactions, agrupa por user_id, lee balance_after más reciente (O(1) por usuario)
-// 2. Ordena por total_xp descendente
-// 3. Asigna position = 1, 2, 3... (sin gaps, empates por user_id determinista)
-// 4. TRUNCATE ranking_global (o marca obsoletas)
-// 5. INSERT nuevas posiciones
-// 6. Repite filtrando por city_id para ranking_municipal
-// 7. COMMIT
-//
-// Nota: Durante la transacción, lecturas ven datos parcialmente actualizados. Aceptable porque ranking es eventualmente consistente (S6 §3.3).
-```
-
-### 5.4 Evaluación de Racha (S7)
-
-```kotlin
-// StreakEvaluationService (ejecutado dentro de la misma transacción que inserta bloque):
-//
-// Entrada: timestamp_start del bloque (truncado a fecha)
-// Lógica:
-// 1. Lee last_exercise_date del usuario
-// 2. Compara:
-//    - Si block_date == last_exercise_date → no cambia (S7 §2.3, escenario "Mismo día")
-//    - Si block_date == last_exercise_date + 1 día → current_streak += 1 (escenario "Día siguiente")
-//    - Si block_date > last_exercise_date + 1 día → current_streak = 1 (escenario "Hueco > 1 día")
-//    - Si last_exercise_date IS NULL → current_streak = 1, best_streak = 1 (escenario "Primera vez")
-// 3. Si current_streak > best_streak → actualiza best_streak
-// 4. Actualiza last_exercise_date = block_date
-// 5. Incluye current_streak, best_streak, last_exercise_date en respuesta de sync
-//
-// Invariantes:
-// - Usa SIEMPRE timestamp_start del bloque, NUNCA server_received_at (S7 §2.5)
-// - NUNCA decrementa current_streak directamente. Solo incrementa o resetea a 1.
-// - Un bloque rechazado (422) NO dispara evaluación (S7 §2.5)
-```
+[Idéntico a v4.0]
 
 ---
 
@@ -393,6 +282,7 @@ ace-backend/
 
 | Decisión | Valor | Justificación | Trade-off | Apéndice |
 |----------|-------|---------------|-----------|----------|
+| **:shared vía JitPack** | `com.github.reinaldojperalta:ace-shared` | Repo separado, compilación automática por tag, sin configuración de tokens PAT. | Requiere tag + push para publicar. No hay "snapshot local" compartido. | — |
 | **Spring Boot 4.0.6** | Última estable | Features de seguridad y performance. Soporte hasta dic 2026. | — | — |
 | **Kotlin 2.2.21** | Baseline de Spring Boot 4.0 | Corrutinas, null-safety. Unificación con mobile/wear (mismo lenguaje, versión adaptada a plataforma). | Mobile/wear usan 2.1.20/2.0.21 por AGP 9.0 built-in. Backend requiere 2.2.21. | — |
 | **Gradle Kotlin DSL** | Tipado en scripts | Mejor que Groovy para detección temprana de errores. Coherente con mobile/wear. | Migración desde Groovy requiere ajuste. | — |
@@ -412,37 +302,13 @@ ace-backend/
 | **TestContainers** | Sí | PostgreSQL real en tests de integración. | Requiere Docker en CI/CD. | — |
 | **kotlinx-serialization** | Sí | Soporte nativo en Spring Boot 4.0. Reemplaza Moshi. | Si :shared usa Moshi, requiere migración de DTOs. | — |
 | **Gson** | Sí | Coherente con mobile (`retrofit-converter-gson`). | Si backend necesita comportamientos específicos de Moshi, requiere ajuste. | — |
+| **H2 (tests)** | Sí | Tests unitarios rápidos sin Docker. | No prueba comportamiento real de PostgreSQL (índices, JSONB). Opcional. | — |
 
 ---
 
 ## 7. Contratos de API con Mobile (Coherentes con :shared)
 
-### 7.1 Endpoints y DTOs
-
-| Endpoint | Método | Request DTO (:shared) | Response DTO (:shared) | Apéndice |
-|----------|--------|----------------------|------------------------|----------|
-| `/api/auth/login` | POST | `AuthRequestDto` | `AuthResponseDto` | S4 §2 |
-| `/api/auth/register` | POST | `AuthRequestDto` | `AuthResponseDto` | S4 §2 |
-| `/api/auth/refresh` | POST | `RefreshTokenRequestDto` | `AuthResponseDto` | S4 §5.3 |
-| `/api/auth/logout` | POST | `RefreshTokenRequestDto` | void | S4 §7.1 |
-| `/api/exercise/blocks` | POST | `SyncBatchRequestDto` | `List<XpAwardedResponseDto>` | S3, S5, S10 |
-| `/api/ranking/global` | GET | — | `RankingResponseDto` | S6 §4.2 |
-| `/api/ranking/municipal/{cityId}` | GET | — | `RankingResponseDto` | S6 §4.2 |
-| `/api/xp/formulas` | GET | — | `List<XpFormulaDto>` + header `X-Formula-Version` | S5 §2.3 |
-| `/api/user/profile` | GET | — | `UserProfile` (entidad JPA, no DTO compartido) | S10 |
-| `/api/user/stats` | GET | — | `official_stats` (en XpAwardedResponseDto) | S10 §3.3 |
-
-### 7.2 Códigos de Error Específicos (Coherentes con Apéndices)
-
-| Código | Body | Cuándo | Acción del Mobile |
-|--------|------|--------|-------------------|
-| `201 Created` | `List<XpAwardedResponseDto>` | Batch aceptado | Marcar SYNCED, actualizar caches |
-| `400 Bad Request` | `{"error": "BATCH_SIZE_EXCEEDED"}` | Batch > 20 bloques | Dividir batch |
-| `401 Unauthorized` | `{"error": "TOKEN_EXPIRED"}` | Access token expirado | Disparar refresh |
-| `401 Unauthorized` | `{"error": "REFRESH_REUSED"}` | Refresh token ya usado | Limpiar tokens, forzar login |
-| `401 Unauthorized` | `{"error": "REFRESH_REVOKED"}` | Refresh revocado remotamente | Limpiar tokens, forzar login |
-| `422 Unprocessable` | `{"error": "BLOCK_VALIDATION_FAILED", "details": [...]}` | XP inconsistente, duración inválida | Marcar ERROR, revertir XP local |
-| `429 Too Many Requests` | `{"error": "RATE_LIMITED"}` | Rate limit | Backoff exponencial |
+[Idéntico a v4.0]
 
 ---
 
@@ -450,7 +316,7 @@ ace-backend/
 
 ### Fase Mínima (Semanas 1-4) — TODOS los sistemas S1-S10 presentes
 
-- [ ] Esqueleto Spring Boot 4.0.6 + Kotlin 2.2.21 + compilerOptions DSL + :shared JAR
+- [ ] Esqueleto Spring Boot 4.0.6 + Kotlin 2.2.21 + compilerOptions DSL + `:shared` vía JitPack
 - [ ] PostgreSQL local con Docker Compose
 - [ ] Flyway V1: todas las tablas (Opción B), V2: seeds rangos/ciudades, V3: índices
 - [ ] **S4 Auth:** Registro/login, JWT híbrido (access 15min / refresh 7días), tabla `refresh_tokens` con **SELECT FOR UPDATE** en rotación
@@ -474,53 +340,28 @@ ace-backend/
 - [ ] Tablas de auditoría (`SuspicionAudit`, `SessionGpsPoint`) creadas pero **sin lógica de escritura**
 - [ ] **compilerOptions DSL:** Verificar que build es successful con `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }`
 - [ ] **kotlinx-serialization:** Verificar que DTOs de :shared se serializan correctamente con Gson/kotlinx-serialization
+- [ ] **JitPack:** Verificar que `com.github.reinaldojperalta:ace-shared` se resuelve correctamente en build
 
 ### Fase de Transición (Semanas 5-8)
-- [ ] Implementar `CyclingXpValidator` y `WalkingXpValidator` (stubs con validación básica)
-- [ ] Anti-trampa mínima: validar que `timestampEnd - timestampStart ≈ 300s` (ya en fase mínima)
-- [ ] Notificación backend (estructura para FCM push en futuro)
-- [ ] Dashboard web administrativo (estructura básica)
+[Idéntico a v4.0]
 
 ### Fase Máxima (Semanas 9-12+)
-- [ ] Anti-trampa completa: análisis de patrones, detección de velocidad imposible
-- [ ] Ranking local (barrio) y filtros avanzados
-- [ ] Eventos y desafíos temporales con multiplicadores de XP
-- [ ] Migración a cloud (AWS/GCP) con RDS PostgreSQL
+[Idéntico a v4.0]
 
 ---
 
 ## 9. Checklist de Integración con Mobile (Coherente con Apéndices)
 
-- [ ] Endpoint `POST /api/exercise/blocks` responde `201` con batch de prueba desde Postman
-- [ ] `XpAwardedResponseDto` incluye: `xpAccepted`, `newTotalXp`, `rankChanged`, `currentStreak`, `lastExerciseDate`, `bestStreak`, `correctionApplied`
-- [ ] Job de ranking actualiza posiciones dentro de 1 hora tras recibir bloque
-- [ ] Refresh token rota correctamente: un refresh usado una vez no puede reusarse → `401 REFRESH_REUSED`
-- [ ] `SELECT FOR UPDATE` en rotación de refresh token (verificar en logs de PostgreSQL)
-- [ ] Índice en `ranking_global.position` y `ranking_municipal.position` (verificar con `EXPLAIN`)
-- [ ] Validación de batch size: batch de 21 bloques debe devolver `400 BATCH_SIZE_EXCEEDED`
-- [ ] `XpValidationService` rechaza bloque con `xpCalculated = 999` para 5min a 80bpm → `422`
-- [ ] `XpValidationService` **acepta** bloque con `xpCalculated = 8` cuando fórmula dice 10 (móvil con fórmula vieja)
-- [ ] Streak evaluation: bloque con `timestamp_start` de ayer no afecta racha de hoy
-- [ ] `client_stats` en batch: backend valida coherencia y responde `official_stats`
-- [ ] `:shared` JAR consumido correctamente (no DTOs duplicados en backend)
-- [ ] **compilerOptions DSL:** build successful sin errores de `kotlinOptions` deprecado
-- [ ] **kotlinx-serialization:** DTOs de :shared se deserializan correctamente sin Moshi
+[Idéntico a v4.0, con adición:]
+
+- [ ] `:shared` vía JitPack (`com.github.reinaldojperalta:ace-shared`) se resuelve sin errores de dependencia
+- [ ] Cambio en DTO de `:shared` (nuevo tag) se refleja en backend tras actualizar versión y sincronizar Gradle
 
 ---
 
 ## 10. Nota sobre Coherencia de Kotlin en el Ecosistema A.C.E
 
-| Módulo | Kotlin | ¿Por qué? | Coherencia |
-|--------|--------|-----------|------------|
-| **Backend** | 2.2.21 | Baseline obligatorio de Spring Boot 4.0 | Mismo lenguaje, versión adaptada a plataforma |
-| **Mobile** | 2.1.20 | Built-in en AGP 9.0.1 | Mismo lenguaje, versión adaptada a plataforma |
-| **Wear** | 2.0.21 | Built-in en AGP 9.0.1 | Mismo lenguaje, versión adaptada a plataforma |
-
-**No intentar unificar a una sola versión de Kotlin.** Cada plataforma tiene su propio toolchain y baseline. La coherencia se mantiene a nivel de:
-- **Lenguaje:** Kotlin en los tres módulos
-- **JVM Target:** 21 en los tres módulos
-- **Serialización:** Gson/kotlinx-serialization en backend y mobile
-- **Coroutines:** 1.9.0 en los tres módulos
+[Idéntico a v4.0]
 
 ---
 

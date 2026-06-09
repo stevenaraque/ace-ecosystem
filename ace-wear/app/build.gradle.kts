@@ -42,6 +42,8 @@ android {
 }
 
 dependencies {
+
+    implementation(libs.ace.shared)
     // Kotlin & Corrutinas
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.android)
@@ -84,4 +86,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+
+
 }
