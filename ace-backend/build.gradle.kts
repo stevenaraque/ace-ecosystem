@@ -55,14 +55,15 @@ dependencies {
 
     runtimeOnly("me.paulschwarz:spring-dotenv:4.0.0")
 
+    // ─── TEST DEPENDENCIES ───
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation("io.mockk:mockk:1.13.12")
-    testImplementation("org.testcontainers:junit-jupiter:1.19.8")
-    testImplementation("org.testcontainers:postgresql:1.19.8")
     testImplementation("org.assertj:assertj-core:3.26.3")
+
+    // ─── H2 para tests de integración ───
     testImplementation("com.h2database:h2")
 }
 
@@ -78,5 +79,4 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-    failOnNoDiscoveredTests = false
 }

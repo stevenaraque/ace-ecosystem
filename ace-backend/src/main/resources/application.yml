@@ -3,7 +3,6 @@ spring:
     name: ace-backend
 
   datasource:
-    # Supabase Connection Pooler (modo transaccional)
     url: jdbc:postgresql://aws-1-us-east-2.pooler.supabase.com:6543/postgres?prepareThreshold=0&sslmode=require
     username: postgres.artujprgqdhhtkwcisxv
     password: ACEpass69**ACE
@@ -17,7 +16,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate        # Flyway crea el schema; JPA solo valida
+      ddl-auto: validate
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -31,7 +30,6 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    # Flyway requiere bloqueos a nivel de sesión, por lo que debe usar el puerto 5432 (session pooler/directo)
     url: jdbc:postgresql://aws-1-us-east-2.pooler.supabase.com:5432/postgres?prepareThreshold=0&sslmode=require
     user: postgres.artujprgqdhhtkwcisxv
     password: ACEpass69**ACE
@@ -42,6 +40,11 @@ spring:
     schemas: public
     placeholders:
       app_name: A.C.E Backend
+
+# ─── JWT Configuration ───
+jwt:
+  secret: ${JWT_SECRET:ace-super-secret-key-min-32-characters-long!!}
+  issuer: ace-backend
 
 server:
   port: ${PORT:8080}
