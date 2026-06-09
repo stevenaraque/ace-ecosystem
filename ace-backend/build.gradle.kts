@@ -21,13 +21,12 @@ java {
 repositories {
     mavenCentral()
     maven { url = uri("https://repo.spring.io/milestone") }
-    flatDir {
-        dirs("libs") // crea una carpeta libs/ y pon el JAR ahí
-    }
+    maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
-    implementation(files("libs/ace-shared-1.0.0.jar"))
+    // ─── :shared vía JitPack ───
+    implementation("com.github.stevenaraque.ace-ecosystem:ace-shared:1.0.0")
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -48,7 +47,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql:42.7.3")
 
     implementation("org.flywaydb:flyway-core:10.15.0")
-	runtimeOnly("org.flywaydb:flyway-database-postgresql:10.15.0")
+    runtimeOnly("org.flywaydb:flyway-database-postgresql:10.15.0")
 
     implementation("org.mindrot:jbcrypt:0.4")
 
@@ -64,7 +63,7 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:1.19.8")
     testImplementation("org.testcontainers:postgresql:1.19.8")
     testImplementation("org.assertj:assertj-core:3.26.3")
-	testImplementation("com.h2database:h2")
+    testImplementation("com.h2database:h2")
 }
 
 kotlin {
@@ -79,5 +78,5 @@ kotlin {
 
 tasks.withType<Test> {
     useJUnitPlatform()
-	failOnNoDiscoveredTests = false
+    failOnNoDiscoveredTests = false
 }
