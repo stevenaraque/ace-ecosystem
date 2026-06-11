@@ -3,20 +3,27 @@ FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
-# Copiar archivos de Gradle primero (para cachear dependencias)
-COPY gradle/ gradle/
-COPY gradlew .
+# Instalar Gradle manualmente
+RUN apk add --no-cache curl unzip \
+    && curl -L https://services.gradle.org/distributions/gradle-8.5-bin.zip -o gradle.zip \
+    && unzip -q gradle.zip \
+    && mv gradle-8.5 /opt/gradle \
+    && rm gradle.zip
+ENV PATH="/opt/gradle/bin:${PATH}"
+
+# Copiar archivos de build
 COPY build.gradle.kts .
 COPY settings.gradle.kts .
+COPY gradle/ gradle/
 
 # Descargar dependencias (capa cacheable)
-RUN ./gradlew dependencies --no-daemon
+RUN gradle dependencies --no-daemon
 
 # Copiar código fuente
 COPY src/ src/
 
 # Compilar y generar JAR
-RUN ./gradlew bootJar --no-daemon
+RUN gradle bootJar --no-daemon
 
 # ─── Stage 2: Runtime ───
 FROM eclipse-temurin:21-jre-alpine
@@ -26,7 +33,7 @@ WORKDIR /app
 # Copiar solo el JAR generado
 COPY --from=builder /app/build/libs/*.jar app.jar
 
-# Puerto expuesto (Render inyecta PORT, pero documentamos)
+# Puerto expuesto
 EXPOSE 8080
 
 # Ejecutar la aplicación
