@@ -5,9 +5,9 @@ WORKDIR /app
 
 # Instalar Gradle manualmente
 RUN apk add --no-cache curl unzip \
-    && curl -L https://services.gradle.org/distributions/gradle-8.5-bin.zip -o gradle.zip \
+    && curl -L https://services.gradle.org/distributions/gradle-8.14-bin.zip -o gradle.zip \
     && unzip -q gradle.zip \
-    && mv gradle-8.5 /opt/gradle \
+    && mv gradle-8.14 /opt/gradle \
     && rm gradle.zip
 ENV PATH="/opt/gradle/bin:${PATH}"
 
