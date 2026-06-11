@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Usuario logueado + tokens + cache de racha.
+ * Usuario logueado + tokens +cache de racha.
  * Apéndice S4 (Auth), S7 (Streaks).
  *
  * NOTA: Solo 1 registro en esta tabla (el usuario actual).
