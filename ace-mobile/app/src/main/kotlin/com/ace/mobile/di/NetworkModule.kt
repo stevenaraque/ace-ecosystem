@@ -23,7 +23,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideBaseUrl(): String = "https://TU_BACKEND_RENDER_URL/"
+    fun provideBaseUrl(): String = "https://ace-ecosystem.onrender.com/"
 
     @Provides
     @Singleton
