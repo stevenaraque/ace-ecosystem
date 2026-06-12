@@ -12,12 +12,13 @@ import okhttp3.Protocol
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import javax.inject.Inject
+import javax.inject.Provider // Importación necesaria para romper la dependencia cíclica
 import javax.inject.Singleton
 
 @Singleton
 class AuthInterceptor @Inject constructor(
     private val userDao: UserDao,
-    private val authApi: AuthApi
+    private val authApiProvider: Provider<AuthApi> // Rompe el bucle de inyección Hilt -> OkHttp -> Retrofit
 ) : Interceptor {
 
     private val lock = Any()
@@ -38,12 +39,14 @@ class AuthInterceptor @Inject constructor(
 
         val response = chain.proceed(authenticatedRequest)
 
+        // Interceptamos el 401 y validamos estrictamente el cuerpo "TOKEN_EXPIRED" del backend
         if (response.code == 401 && isTokenExpired(response)) {
-            response.close()
+            response.close() // Cerramos la respuesta anterior para evitar memory leaks
 
             val newToken = synchronized(lock) {
                 runBlocking {
                     val freshUser = userDao.getCurrentUser()
+                    // Si otra petición en paralelo ya completó el refresh con éxito, tomamos ese token directamente
                     if (freshUser?.accessToken != token && freshUser?.accessToken != null) {
                         freshUser.accessToken
                     } else {
@@ -53,12 +56,14 @@ class AuthInterceptor @Inject constructor(
             }
 
             return if (newToken != null) {
+                // Reintentamos la petición original mutando el Header de autorización
                 val retryRequest = request.newBuilder()
                     .removeHeader("Authorization")
                     .addHeader("Authorization", "Bearer $newToken")
                     .build()
                 chain.proceed(retryRequest)
             } else {
+                // Si el refresh no devolvió un token, la sesión expiró por completo
                 Response.Builder()
                     .request(request)
                     .protocol(Protocol.HTTP_1_1)
@@ -87,7 +92,8 @@ class AuthInterceptor @Inject constructor(
         val deviceId = user.deviceId
 
         return try {
-            val retrofitResponse = authApi.refresh(
+            // Obtenemos la instancia de AuthApi dinámicamente mediante el Provider
+            val retrofitResponse = authApiProvider.get().refresh(
                 RefreshTokenRequestDto(
                     refreshToken = refreshToken,
                     deviceId = deviceId
@@ -101,8 +107,10 @@ class AuthInterceptor @Inject constructor(
                 userDao.updateRefreshToken(user.userId, body.refreshToken)
                 body.accessToken
             } else {
+                // Si el backend rechaza el Refresh Token (401), se asume sesión robada o vencida permanentemente
                 if (retrofitResponse.code() == 401) {
-                    userDao.clearUser()
+                    // Limpieza lógica: Mantenemos el deviceId para preservar el ciclo de auditoría del terminal
+                    userDao.clearTokens(user.userId)
                 }
                 null
             }
@@ -115,6 +123,7 @@ class AuthInterceptor @Inject constructor(
         val path = request.url.encodedPath
         return !path.contains("/auth/login") &&
                 !path.contains("/auth/register") &&
-                !path.contains("/auth/refresh")
+                !path.contains("/auth/refresh") &&
+                !path.contains("/auth/logout") // Excluido para que no intente autorefrescarse durante la desconexión
     }
 }

@@ -83,18 +83,36 @@ class AuthRepository @Inject constructor(
 
     suspend fun logout(): Result<Unit> {
         return try {
-            userDao.getCurrentUser()?.refreshToken?.let { token ->
-                authApi.logout(token)
+            val currentUser = userDao.getCurrentUser()
+
+            if (currentUser != null) {
+                // 1. Intento de revocación remota en Backend (Fire-and-forget)
+                // Si falla la red, el catch interno absorbe el error para no bloquear el flujo local.
+                currentUser.refreshToken?.let { token ->
+                    runCatching {
+                        authApi.logout(token)
+                    }
+                }
+
+                // 2. Limpieza lógica local (S4 §3.3)
+                // Se anulan los tokens pero permanece la entidad con su deviceId intacto.
+                userDao.clearTokens(currentUser.userId)
             }
-            userDao.clearUser()
             Result.success(Unit)
         } catch (e: Exception) {
-            userDao.clearUser()
-            Result.success(Unit)
+            // Si algo falla a nivel base de datos local, propagamos la excepción
+            Result.failure(e)
         }
     }
 
-    fun isLoggedIn(): Flow<Boolean> = userDao.observeCurrentUser().map { it != null }
+    /**
+     * Ajustado para verificar la existencia del token de acceso.
+     * Como clearTokens() mantiene la fila del usuario viva en SQLite,
+     * evaluar solo con 'it != null' provocaría falsos positivos de sesión activa.
+     */
+    fun isLoggedIn(): Flow<Boolean> = userDao.observeCurrentUser().map { user ->
+        user != null && !user.accessToken.isNullOrEmpty()
+    }
 
     suspend fun getCurrentUserId(): String? = userDao.getCurrentUser()?.userId
 }

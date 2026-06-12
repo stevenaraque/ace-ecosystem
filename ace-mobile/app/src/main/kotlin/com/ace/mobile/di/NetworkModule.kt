@@ -16,6 +16,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
+import javax.inject.Provider
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -67,9 +68,9 @@ object NetworkModule {
     @Singleton
     fun provideAuthInterceptor(
         userDao: UserDao,
-        authApi: AuthApi
+        authApiProvider: Provider<AuthApi> // ◄──          Cambiado de AuthApi a Provider<AuthApi>
     ): AuthInterceptor {
-        return AuthInterceptor(userDao, authApi)
+        return AuthInterceptor(userDao, authApiProvider) // ◄── Le pasamos el proveedor
     }
 
     @Provides
