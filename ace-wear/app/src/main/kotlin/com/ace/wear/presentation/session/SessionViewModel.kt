@@ -48,21 +48,20 @@ class SessionViewModel @Inject constructor(
     /** Job del timer para contar segundos */
     private var timerJob: Job? = null
 
+    /** SessionId activo recibido del movil */
+    private var currentSessionId: String? = null
+
     init {
         // Escuchar muestras de FC y actualizar el estado
         healthServicesManager.heartRateSamples
             .onEach { sample ->
-                _state.value = _state.value.copy(
-                    bpm = sample.bpm
-                )
+                _state.value = _state.value.copy(bpm = sample.bpm)
             }
             .launchIn(viewModelScope)
 
-        // Escuchar disponibilidad del sensor (opcional, para debug)
+        // Escuchar disponibilidad del sensor
         healthServicesManager.availability
-            .onEach { availability ->
-                // Se puede usar para mostrar estado del sensor en UI
-            }
+            .onEach { /* usado para debug o extension futura */ }
             .launchIn(viewModelScope)
 
         // Escuchar comandos del movil para saber si hay sesion activa
@@ -89,13 +88,12 @@ class SessionViewModel @Inject constructor(
      * Procesa inicio de sesion (START recibido del movil).
      */
     private fun onSessionStarted(sessionId: String) {
+        currentSessionId = sessionId  // ← guardamos el sessionId real
         _state.value = _state.value.copy(
             isSessionActive = true,
             elapsedSeconds = 0L,
             bpm = null
         )
-
-        // Iniciar timer
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
@@ -111,6 +109,7 @@ class SessionViewModel @Inject constructor(
      * Procesa fin de sesion (STOP recibido del movil).
      */
     private fun onSessionStopped(sessionId: String) {
+        currentSessionId = null
         stopTimer()
         _state.value = _state.value.copy(
             isSessionActive = false,
@@ -123,8 +122,10 @@ class SessionViewModel @Inject constructor(
      * Envia STOPPED al movil y limpia estado.
      */
     fun onStopButtonClicked() {
-        val currentSessionId = "current" // TODO: Guardar sessionId real cuando llega START
-        wearMessageClient.sendStoppedToMobile(currentSessionId)
+        currentSessionId?.let { sessionId ->
+            wearMessageClient.sendStoppedToMobile(sessionId)
+        }
+        currentSessionId = null
         stopTimer()
         _state.value = _state.value.copy(
             isSessionActive = false,
@@ -134,9 +135,17 @@ class SessionViewModel @Inject constructor(
 
     /**
      * Limpia recursos al destruir el ViewModel.
+     * Solo stopTimer aqui — dispose() se llama desde MainActivity.onDestroy().
      */
     override fun onCleared() {
         super.onCleared()
+        stopTimer()
+    }
+
+    /**
+     * Limpia todos los recursos. Llamar desde MainActivity.onDestroy().
+     */
+    fun dispose() {
         stopTimer()
         stopExerciseUseCase()
     }
@@ -144,9 +153,5 @@ class SessionViewModel @Inject constructor(
     private fun stopTimer() {
         timerJob?.cancel()
         timerJob = null
-    }
-    fun dispose() {
-        stopTimer()
-        stopExerciseUseCase()
     }
 }

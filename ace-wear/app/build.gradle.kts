@@ -12,6 +12,15 @@ android {
             minorApiLevel = 1
         }
     }
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+            all {
+                it.jvmArgs("-XX:+EnableDynamicAgentLoading")
+            }
+        }
+    }
+
 
     defaultConfig {
         applicationId = "sena.adso.ace_wear"
@@ -86,6 +95,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockito.kotlin)
 
 
 }

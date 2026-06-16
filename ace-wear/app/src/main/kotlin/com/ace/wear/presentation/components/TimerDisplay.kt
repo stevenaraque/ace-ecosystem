@@ -8,7 +8,7 @@ import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 
 /**
- * Muestra el tiempo transcurrido de la sesion en formato MM:SS.
+ * Muestra el tiempo transcurrido de la sesion en formato mm:ss.
  */
 @Composable
 fun TimerDisplay(
@@ -16,11 +16,11 @@ fun TimerDisplay(
 ) {
     val minutes = elapsedSeconds / 60
     val seconds = elapsedSeconds % 60
-    val formatted = String.format("%02d:%02d", minutes, seconds)
+    val displayText = String.format("%02d:%02d", minutes, seconds)
 
     Text(
-        text = formatted,
-        style = MaterialTheme.typography.title2,
+        text = displayText,
+        style = MaterialTheme.typography.title3,
         textAlign = TextAlign.Center
     )
 }

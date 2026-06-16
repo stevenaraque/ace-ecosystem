@@ -10,7 +10,6 @@ import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import androidx.wear.compose.material.contentColorFor
 
 /**
  * Boton DETENER para finalizar la sesion de ejercicio.
