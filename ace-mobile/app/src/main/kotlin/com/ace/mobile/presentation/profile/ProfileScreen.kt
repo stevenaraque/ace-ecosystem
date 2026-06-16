@@ -15,7 +15,15 @@ import androidx.navigation.NavController
 fun ProfileScreen(
     navController: NavController,
     viewModel: ProfileViewModel
+
 ) {
+    Button(
+        onClick = {
+            navController.navigate("session_screen_route")
+        }
+    ) {
+        Text("Start Exercise")
+    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // LaunchedEffect escucha los eventos de navegación únicos del ViewModel
