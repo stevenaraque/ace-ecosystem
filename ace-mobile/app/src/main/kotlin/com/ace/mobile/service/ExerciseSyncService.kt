@@ -14,7 +14,6 @@ import com.ace.mobile.domain.model.ExerciseSession
 import com.ace.mobile.domain.model.HeartRateSample
 import com.ace.mobile.domain.usecase.wear.BuildExerciseBlockUseCase
 import com.ace.mobile.domain.usecase.wear.ReceiveWearDataUseCase
-import com.ace.shared.constants.XpConstants
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -42,8 +42,8 @@ class ExerciseSyncService : Service() {
         const val BUFFER_CAPACITY = 300
         const val DISCONNECT_TIMEOUT_MS = 5000L
 
-        // Para pruebas: cambiar a 30 segundos (30000L) en lugar de 300000L (5 minutos)
-        const val BLOCK_DURATION_MS = 300000L
+        // Para pruebas: 30 segundos
+        const val BLOCK_DURATION_MS = 30000L
     }
 
     @Inject
@@ -58,8 +58,8 @@ class ExerciseSyncService : Service() {
     private var _lastSampleTime = 0L
     private var _isCollecting = false
 
-    private val _heartRate = MutableStateFlow(0)
-    val heartRate: StateFlow<Int> = _heartRate.asStateFlow()
+    private val _heartRate = MutableStateFlow(0.0)
+    val heartRate: StateFlow<Double> = _heartRate.asStateFlow()
 
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
@@ -132,6 +132,10 @@ class ExerciseSyncService : Service() {
 
                 checkBlockClosure(sessionId, sportType, userId)
             }
+            .catch { e ->
+                android.util.Log.e("ExerciseSyncService", "Error en flow de FC", e)
+                _isConnected.value = false
+            }
             .launchIn(serviceScope)
     }
 
@@ -170,8 +174,15 @@ class ExerciseSyncService : Service() {
             if (_buffer.isNotEmpty()) {
                 val samples = _buffer.toList()
                 _buffer.clear()
-                android.util.Log.d("ExerciseSyncService",
-                    "Final block: ${samples.size} samples")
+
+                // Procesar bloque final corto
+                serviceScope.launch(Dispatchers.IO) {
+                    android.util.Log.d("ExerciseSyncService",
+                        "Final block: ${samples.size} samples, " +
+                                "${(samples.last().timestamp - samples.first().timestamp)/1000}s")
+                    // TODO: Guardar bloque final en SQLite
+                    // TODO: Calcular XP reducida para bloque corto
+                }
             }
         }
 
@@ -182,7 +193,7 @@ class ExerciseSyncService : Service() {
 
     private fun updateNotification(sportType: String) {
         val notification = buildNotification(
-            "FC: ${_heartRate.value} bpm · ${_elapsedSeconds.value / 60}:${String.format("%02d", _elapsedSeconds.value % 60)}",
+            "FC: ${_heartRate.value.toInt()} bpm · ${_elapsedSeconds.value / 60}:${String.format("%02d", _elapsedSeconds.value % 60)}",
             sportType,
             _blockCount.value,
             _elapsedSeconds.value

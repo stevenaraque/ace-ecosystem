@@ -15,7 +15,6 @@ class SendStartCommandUseCase @Inject constructor(
     }
 
     companion object {
-        // Path hardcodeado como string literal (consistente con :shared)
         private const val SESSION_STATUS_PATH = "/ace/session/%s/status"
         private const val START_COMMAND = "START"
     }
@@ -30,15 +29,22 @@ class SendStartCommandUseCase @Inject constructor(
                 putLong("timestamp", System.currentTimeMillis())
             }
 
-            wearMessageClient.sendMessage(
+            val sendResult = wearMessageClient.sendMessage(
                 path = path,
                 data = dataMap.toByteArray()
             )
 
-            Result.Success("Comando START enviado al reloj")
+            sendResult.fold(
+                onSuccess = { nodeCount ->
+                    Result.Success("Comando START enviado a $nodeCount dispositivo(s)")
+                },
+                onFailure = { e ->
+                    Result.Error("Reloj no al alcance. ${e.message}")
+                }
+            )
 
         } catch (e: Exception) {
-            Result.Error("Reloj no al alcance. ${e.message}")
+            Result.Error("Error inesperado. ${e.message}")
         }
     }
 }

@@ -1,20 +1,22 @@
 package com.ace.mobile.data.wear
 
+import android.content.Context
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.Wearable
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class WearMessageClient @Inject constructor(
-    private val messageClient: MessageClient
+    private val messageClient: MessageClient,
+    @ApplicationContext private val context: Context
 ) {
 
     suspend fun sendMessage(path: String, data: ByteArray): Result<Int> {
         return try {
-            // Obtener nodos conectados (el reloj)
-            val nodes = Wearable.getNodeClient(messageClient.applicationContext)
+            val nodes = Wearable.getNodeClient(context)
                 .connectedNodes
                 .await()
 
@@ -22,7 +24,6 @@ class WearMessageClient @Inject constructor(
                 return Result.failure(Exception("No Wear OS device connected"))
             }
 
-            // Enviar a todos los nodos (normalmente solo hay uno)
             nodes.forEach { node ->
                 messageClient.sendMessage(node.id, path, data).await()
             }

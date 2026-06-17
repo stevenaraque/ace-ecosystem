@@ -15,7 +15,6 @@ import com.ace.mobile.data.local.database.entity.LocalUserStatsEntity
 @Database(
     entities = [
         LocalUserEntity::class,
-        // NUEVAS: Entidades agregadas para sesiones, bloques, historial, stats y ranking
         LocalSessionEntity::class,
         LocalBlockEntity::class,
         LocalSessionHistoryEntity::class,
@@ -27,7 +26,6 @@ import com.ace.mobile.data.local.database.entity.LocalUserStatsEntity
 )
 abstract class AceDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
-
     abstract fun sessionDao(): SessionDao
     abstract fun blockDao(): BlockDao
 }

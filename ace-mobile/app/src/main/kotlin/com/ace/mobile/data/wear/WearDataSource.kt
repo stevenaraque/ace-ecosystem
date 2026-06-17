@@ -27,7 +27,7 @@ class WearDataSource @Inject constructor(
                     val dataItem = event.dataItem
                     if (dataItem.uri.path?.startsWith("/ace/health/heart_rate") == true) {
                         val dataMap = DataMapItem.fromDataItem(dataItem).dataMap
-                        val bpm = dataMap.getInt("bpm", 0)
+                        val bpm = dataMap.getDouble("bpm", 0.0)
                         val timestamp = dataMap.getLong("timestamp", 0L)
 
                         if (bpm > 0 && timestamp > 0) {

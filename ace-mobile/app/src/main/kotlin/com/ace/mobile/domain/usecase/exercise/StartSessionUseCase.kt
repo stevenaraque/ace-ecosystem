@@ -1,9 +1,10 @@
 package com.ace.mobile.domain.usecase.exercise
 
+import android.util.Log
 import com.ace.mobile.data.local.database.dao.SessionDao
 import com.ace.mobile.data.local.database.entity.LocalSessionEntity
 import com.ace.mobile.domain.model.ExerciseSession
-import com.ace.mobile.domain.usecase.wear.SendStopCommandUseCase
+import com.ace.mobile.domain.usecase.wear.SendStartCommandUseCase
 import com.ace.shared.enums.SessionStatus
 import com.ace.shared.enums.SportType
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,7 @@ import javax.inject.Inject
 
 class StartSessionUseCase @Inject constructor(
     private val sessionDao: SessionDao,
-    private val sendStartCommandUseCase: SendStopCommandUseCase
+    private val sendStartCommandUseCase: SendStartCommandUseCase
 ) {
 
     suspend operator fun invoke(
@@ -21,17 +22,14 @@ class StartSessionUseCase @Inject constructor(
         userId: String
     ): Result<ExerciseSession> = withContext(Dispatchers.IO) {
         try {
-            // 1. Verificar si ya existe sesión ACTIVE y abortarla
             val activeSession = sessionDao.getActiveSession()
             activeSession?.let {
                 sessionDao.updateSessionStatus(it.sessionId, SessionStatus.ABORTED.name)
             }
 
-            // 2. Generar IDs locales
             val sessionId = UUID.randomUUID().toString()
             val deviceId = UUID.randomUUID().toString()
 
-            // 3. Crear sesión en SQLite
             val timestampStart = System.currentTimeMillis()
             val sessionEntity = LocalSessionEntity(
                 sessionId = sessionId,
@@ -46,13 +44,11 @@ class StartSessionUseCase @Inject constructor(
             )
             sessionDao.insertSession(sessionEntity)
 
-            // 4. Enviar comando START al reloj
             val sendResult = sendStartCommandUseCase(sessionId)
-            if (sendResult is SendStopCommandUseCase.Result.Error) {
-                // Log pero no fallamos — la sesión existe localmente
+            if (sendResult is SendStartCommandUseCase.Result.Error) {
+                Log.w("StartSessionUseCase", "Reloj no al alcance: ${sendResult.message}")
             }
 
-            // 5. Retornar modelo de dominio
             Result.success(
                 ExerciseSession(
                     sessionId = sessionId,

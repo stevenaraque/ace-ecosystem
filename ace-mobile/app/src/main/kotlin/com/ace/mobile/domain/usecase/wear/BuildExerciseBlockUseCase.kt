@@ -10,7 +10,7 @@ import javax.inject.Inject
 class BuildExerciseBlockUseCase @Inject constructor() {
 
     companion object {
-        // Constantes hardcodeadas localmente (consistentes con arquitectura A.C.E)
+
         private const val BLOCK_DURATION_SECONDS = 300        // 5 minutos
         private const val BLOCK_DURATION_TOLERANCE_PERCENT = 10 // ±10%
     }
@@ -25,8 +25,8 @@ class BuildExerciseBlockUseCase @Inject constructor() {
         val timestampEnd: Long,
         val durationSeconds: Int,
         val avgBpm: Double,
-        val maxBpm: Int,
-        val minBpm: Int,
+        val maxBpm: Double,
+        val minBpm: Double,
         val sampleCount: Int
     )
 
@@ -41,7 +41,6 @@ class BuildExerciseBlockUseCase @Inject constructor() {
         val timestampEnd = samples.last().timestamp
         val durationSeconds = ((timestampEnd - timestampStart) / 1000).toInt()
 
-        // Validar duración: entre 270-330 segundos (±10% de 300)
         val minDuration = BLOCK_DURATION_SECONDS -
                 (BLOCK_DURATION_SECONDS * BLOCK_DURATION_TOLERANCE_PERCENT / 100)
         val maxDuration = BLOCK_DURATION_SECONDS +
@@ -53,8 +52,8 @@ class BuildExerciseBlockUseCase @Inject constructor() {
 
         val bpmValues = samples.map { it.bpm }
         val avgBpm = bpmValues.average()
-        val maxBpm = bpmValues.maxOrNull() ?: 0
-        val minBpm = bpmValues.minOrNull() ?: 0
+        val maxBpm = bpmValues.maxOrNull() ?: 0.0
+        val minBpm = bpmValues.minOrNull() ?: 0.0
         val sampleCount = samples.size
 
         BlockResult(

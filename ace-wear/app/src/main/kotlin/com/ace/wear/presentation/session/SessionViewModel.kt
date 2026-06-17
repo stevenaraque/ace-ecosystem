@@ -2,6 +2,7 @@
 
 package com.ace.wear.presentation.session
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ace.wear.data.health.HealthServicesManager
@@ -9,6 +10,7 @@ import com.ace.wear.data.repository.WearHealthRepository
 import com.ace.wear.data.sync.WearMessageClient
 import com.ace.wear.domain.usecase.StopExerciseUseCase
 import com.ace.wear.presentation.WearSessionState
+import com.google.android.gms.wearable.NodeClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -18,53 +20,42 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 /**
  * ViewModel de la sesion de ejercicio en el reloj.
- *
- * Responsabilidades:
- * - Exponer WearSessionState a la UI (SessionScreen)
- * - Escuchar muestras de FC del HealthServicesManager
- * - Contar el tiempo transcurrido de la sesion
- * - Manejar el boton DETENER (enviar STOPPED al movil)
  */
 @HiltViewModel
 class SessionViewModel @Inject constructor(
     private val healthServicesManager: HealthServicesManager,
     private val wearMessageClient: WearMessageClient,
     private val stopExerciseUseCase: StopExerciseUseCase,
-    private val wearHealthRepository: WearHealthRepository
+    private val wearHealthRepository: WearHealthRepository,
+    private val nodeClient: NodeClient
 ) : ViewModel() {
 
     companion object {
         private const val TAG = "SessionViewModel"
     }
 
-    /** Estado expuesto a la UI */
     private val _state = MutableStateFlow(WearSessionState())
     val state: StateFlow<WearSessionState> = _state.asStateFlow()
 
-    /** Job del timer para contar segundos */
     private var timerJob: Job? = null
-
-    /** SessionId activo recibido del movil */
     private var currentSessionId: String? = null
 
     init {
-        // Escuchar muestras de FC y actualizar el estado
         healthServicesManager.heartRateSamples
             .onEach { sample ->
                 _state.value = _state.value.copy(bpm = sample.bpm)
             }
             .launchIn(viewModelScope)
 
-        // Escuchar disponibilidad del sensor
         healthServicesManager.availability
-            .onEach { /* usado para debug o extension futura */ }
+            .onEach { }
             .launchIn(viewModelScope)
 
-        // Escuchar comandos del movil para saber si hay sesion activa
         wearMessageClient.commands
             .onEach { command ->
                 when (command) {
@@ -75,20 +66,37 @@ class SessionViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /**
-     * Inicializa el repositorio al arrancar la app.
-     * Llama a esto desde MainActivity.onCreate().
-     */
     fun initialize() {
         wearHealthRepository.initialize()
-        _state.value = _state.value.copy(isConnected = true)
+        checkConnectionStatus()
     }
 
-    /**
-     * Procesa inicio de sesion (START recibido del movil).
-     */
+    private fun checkConnectionStatus() {
+        viewModelScope.launch {
+            try {
+                val nodes = nodeClient.connectedNodes.await()
+                val hasConnectedNode = nodes.isNotEmpty()
+
+                _state.value = _state.value.copy(isConnected = hasConnectedNode)
+
+                Log.i(TAG, "Nodos conectados: ${nodes.size}")
+                nodes.forEach { node ->
+                    Log.i(TAG, "  - ${node.displayName} (${node.id})")
+                }
+
+                if (!hasConnectedNode) {
+                    Log.w(TAG, "No hay movil conectado por DataLayer")
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error verificando nodos", e)
+                _state.value = _state.value.copy(isConnected = false)
+            }
+        }
+    }
+
     private fun onSessionStarted(sessionId: String) {
-        currentSessionId = sessionId  // ← guardamos el sessionId real
+        currentSessionId = sessionId
         _state.value = _state.value.copy(
             isSessionActive = true,
             elapsedSeconds = 0L,
@@ -105,9 +113,6 @@ class SessionViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Procesa fin de sesion (STOP recibido del movil).
-     */
     private fun onSessionStopped(sessionId: String) {
         currentSessionId = null
         stopTimer()
@@ -117,10 +122,6 @@ class SessionViewModel @Inject constructor(
         )
     }
 
-    /**
-     * Usuario toca boton DETENER en el reloj.
-     * Envia STOPPED al movil y limpia estado.
-     */
     fun onStopButtonClicked() {
         currentSessionId?.let { sessionId ->
             wearMessageClient.sendStoppedToMobile(sessionId)
@@ -133,18 +134,11 @@ class SessionViewModel @Inject constructor(
         )
     }
 
-    /**
-     * Limpia recursos al destruir el ViewModel.
-     * Solo stopTimer aqui — dispose() se llama desde MainActivity.onDestroy().
-     */
     override fun onCleared() {
         super.onCleared()
         stopTimer()
     }
 
-    /**
-     * Limpia todos los recursos. Llamar desde MainActivity.onDestroy().
-     */
     fun dispose() {
         stopTimer()
         stopExerciseUseCase()
