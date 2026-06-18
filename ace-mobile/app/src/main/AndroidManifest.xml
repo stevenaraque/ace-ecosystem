@@ -2,11 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
 xmlns:tools="http://schemas.android.com/tools">
 
+<!-- PERMISOS EXISTENTES (sin tocar) -->
 <uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<!-- PERMISOS NUEVOS (requeridos para Wear OS) -->
+<uses-permission android:name="com.google.android.gms.permission.WEARABLE" />
+<uses-permission android:name="android.permission.BODY_SENSORS" />
 
 <application
     android:name="com.ace.mobile.MobileApplication"
@@ -20,6 +25,7 @@ xmlns:tools="http://schemas.android.com/tools">
     android:theme="@style/Theme.Acemobile"
     android:usesCleartextTraffic="false">
 
+    <!-- ACTIVITY EXISTENTE (sin tocar) -->
     <activity
         android:name="com.ace.mobile.presentation.MainActivity"
         android:exported="true"
@@ -30,6 +36,14 @@ xmlns:tools="http://schemas.android.com/tools">
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
     </activity>
+
+    <!-- SERVICE NUEVO: Foreground Service para sesiones de ejercicio -->
+    <service
+        android:name="com.ace.mobile.service.ExerciseSyncService"
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="health" />
+
 </application>
 
 </manifest>

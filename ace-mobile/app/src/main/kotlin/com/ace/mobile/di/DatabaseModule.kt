@@ -3,6 +3,8 @@ package com.ace.mobile.di
 import android.content.Context
 import androidx.room.Room
 import com.ace.mobile.data.local.database.AceDatabase
+import com.ace.mobile.data.local.database.dao.BlockDao
+import com.ace.mobile.data.local.database.dao.SessionDao
 import com.ace.mobile.data.local.database.dao.UserDao
 import dagger.Module
 import dagger.Provides
@@ -29,4 +31,11 @@ object DatabaseModule {
 
     @Provides
     fun provideUserDao(database: AceDatabase): UserDao = database.userDao()
+
+    @Provides
+    fun provideSessionDao(database: AceDatabase): SessionDao = database.sessionDao()
+
+    @Provides
+    fun provideBlockDao(database: AceDatabase): BlockDao = database.blockDao()
+
 }

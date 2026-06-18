@@ -6,7 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-class SendStartCommandUseCase @Inject constructor(
+class SendStopCommandUseCase @Inject constructor(
     private val wearMessageClient: WearMessageClient
 ) {
     sealed class Result {
@@ -16,7 +16,7 @@ class SendStartCommandUseCase @Inject constructor(
 
     companion object {
         private const val SESSION_STATUS_PATH = "/ace/session/%s/status"
-        private const val START_COMMAND = "START"
+        private const val STOP_COMMAND = "STOP"
     }
 
     suspend operator fun invoke(sessionId: String): Result = withContext(Dispatchers.IO) {
@@ -24,7 +24,7 @@ class SendStartCommandUseCase @Inject constructor(
             val path = SESSION_STATUS_PATH.format(sessionId)
 
             val dataMap = DataMap().apply {
-                putString("command", START_COMMAND)
+                putString("command", STOP_COMMAND)
                 putString("sessionId", sessionId)
                 putLong("timestamp", System.currentTimeMillis())
             }
@@ -36,7 +36,7 @@ class SendStartCommandUseCase @Inject constructor(
 
             sendResult.fold(
                 onSuccess = { nodeCount ->
-                    Result.Success("Comando START enviado a $nodeCount dispositivo(s)")
+                    Result.Success("Comando STOP enviado a $nodeCount dispositivo(s)")
                 },
                 onFailure = { e ->
                     Result.Error("Reloj no al alcance. ${e.message}")

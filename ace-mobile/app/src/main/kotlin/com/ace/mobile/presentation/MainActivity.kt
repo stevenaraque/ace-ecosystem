@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ace.mobile.presentation.auth.LoginScreen
+import com.ace.mobile.presentation.exercise.SessionScreen
 import com.ace.mobile.presentation.profile.ProfileScreen
 import com.ace.mobile.presentation.profile.ProfileViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -25,37 +26,40 @@ class MainActivity : ComponentActivity() {
         setContent {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
 
-                // 1. Inicializamos el controlador de navegación
                 val navController = rememberNavController()
 
-                // 2. Configuramos el NavHost que gestionará el intercambio de pantallas
                 NavHost(
                     navController = navController,
-                    startDestination = "login_screen_route", // Pantalla de inicio
-                    modifier = Modifier.padding(innerPadding) // Aplica los márgenes seguros del Edge-to-Edge
+                    startDestination = "login_screen_route",
+                    modifier = Modifier.padding(innerPadding)
                 ) {
 
-                    // RUTA A: Pantalla de Login
+                    // RUTA A: Pantalla de Login (existente)
                     composable("login_screen_route") {
                         LoginScreen(
                             onLoginSuccess = {
-                                // Al iniciar sesión con éxito, navegamos al Perfil
                                 navController.navigate("profile_screen_route") {
-                                    // Limpiamos el Login del historial para que el usuario no pueda "volver atrás"
                                     popUpTo("login_screen_route") { inclusive = true }
                                 }
                             }
                         )
                     }
 
-                    // RUTA B: Pantalla de Perfil (La que acabamos de crear)
+                    // RUTA B: Pantalla de Perfil (existente)
                     composable("profile_screen_route") {
-                        // Hilt inyecta el LogoutUseCase automáticamente en este ViewModel
                         val profileViewModel: ProfileViewModel = hiltViewModel()
 
                         ProfileScreen(
                             navController = navController,
                             viewModel = profileViewModel
+                        )
+                    }
+
+                    // RUTA C: Pantalla de Sesión de Ejercicio (NUEVA)
+                    composable("session_screen_route") {
+                        // TODO: Reemplazar "user-123" con el userId real del usuario logueado
+                        SessionScreen(
+                            userId = "user-123" // Temporal hasta integrar auth
                         )
                     }
                 }

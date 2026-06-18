@@ -1,13 +1,11 @@
 package com.ace.mobile.presentation.exercise
 
-import com.ace.shared.enums.SportType
+import com.ace.mobile.domain.model.ExerciseSession
 
-data class SessionUiState(
-    val isSessionActive: Boolean = false,
-    val currentHeartRate: Int? = null,
-    val elapsedTimeSeconds: Long = 0,
-    val sportType: SportType? = null,
-    val isConnectedToWear: Boolean = false,
-    val xpEarnedThisSession: Int = 0,
-    val errorMessage: String? = null
-)
+sealed class SessionUiState {
+    data object Idle : SessionUiState()
+    data object Loading : SessionUiState()
+    data class Active(val session: ExerciseSession) : SessionUiState()
+    data class Completed(val session: ExerciseSession) : SessionUiState()
+    data class Error(val message: String) : SessionUiState()
+}
