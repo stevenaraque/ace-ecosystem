@@ -52,7 +52,6 @@ android {
 
 dependencies {
 
-    implementation(libs.ace.shared)
     // Kotlin & Corrutinas
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.android)

@@ -11,6 +11,7 @@
 **/.idea/
 **/*.iml
 **/.vscode/
+nul
 
 # OS
 .DS_Store

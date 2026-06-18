@@ -1,8 +1,8 @@
 # A.C.E — Implementation Plan: Shared Module (`:shared`)
 
 > **Estado:** ✅ **Implementado y Publicado**  
-> **Versión:** 4.2 (Actualizado: `:shared` v1.0.0 implementado y publicado en JitPack)  
-> **Fecha:** 2026-06-08  
+> **Versión:** 4.3 (Actualizado: `:shared` v1.0.4; wear NO consume — confirmado)  
+> **Fecha:** 2026-06-18  
 > **Stack:** Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · kotlinx-serialization 1.8.0 · Gson 2.11.0 · JUnit 5.11.0  
 > **Publicado en:** [JitPack](https://jitpack.io/#reinaldojperalta/ace-shared)  
 > **Depende de:** Apéndices S1, S2, S3, S4, S5, S6, S7, S8, S9, S10 y Arquitectura A.C.E v0.3  
@@ -25,7 +25,7 @@ El módulo `:shared` es el **contrato inmutable** entre backend y mobile. Contie
 
 **Nota sobre JitPack:** El artifact se publica automáticamente vía [JitPack](https://jitpack.io). El group Maven se resuelve como `com.github.reinaldojperalta` (sobrescrito por JitPack). Los consumidores deben usar esta coordenada exacta.
 
-**Estado actual:** `:shared` v1.0.0 está **implementado, probado (17 tests pasando) y publicado** en JitPack. Repo separado: `reinaldojperalta/ace-shared`. Ver §8 para detalles de consumo.
+**Estado actual:** `:shared` v1.0.4 está **implementado, probado y publicado** en JitPack. Repo separado: `reinaldojperalta/ace-shared`. Ver §8 para detalles de consumo.
 
 ---
 
@@ -600,7 +600,7 @@ object KotlinxSerializationConfig {
 5. JitPack detecta el tag automáticamente, compila y publica.
 6. Verificar estado en: `https://jitpack.io/#reinaldojperalta/ace-shared`
 
-**Estado actual:** v1.0.0 ya está publicado y disponible. Los consumidores (`ace-backend`, `ace-mobile`) pueden declarar la dependencia inmediatamente.
+**Estado actual:** v1.0.4 está publicado y disponible. Los consumidores (`ace-backend`, `ace-mobile`) usan esta versión. **`ace-wear` NO consume `:shared`** (paths hardcodeados).
 
 ### 8.3 Coordenada Maven para Consumidores
 
@@ -612,12 +612,12 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.4")
 }
 ```
 
 ```kotlin
-// Mobile (ace-mobile/app/build.gradle.kts)
+// Mobile (ace-mobile/app/build.gradle.kts) — usa version catalog
 repositories {
     google()
     mavenCentral()
@@ -625,8 +625,14 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation(libs.ace.shared)  // apunta a ace-shared = "1.0.4" en libs.versions.toml
 }
+```
+
+```kotlin
+// Wear (ace-wear/app/build.gradle.kts) — ❌ NO consume :shared
+// Los paths del Data Layer se definen como strings literales locales.
+// No se declara dependency a ace-shared.
 ```
 
 **⚠️ IMPORTANTE:** JitPack sobrescribe el `group` definido en `build.gradle.kts` (`com.ace`) por `com.github.reinaldojperalta`. Los consumidores DEBEN usar `com.github.reinaldojperalta:ace-shared`.
@@ -663,7 +669,7 @@ dependencies {
 | Módulo | Kotlin | ¿Por qué? | Coherencia |
 |--------|--------|-----------|------------|
 | **Backend** | 2.2.21 | Baseline obligatorio de Spring Boot 4.0 | Mismo lenguaje, versión adaptada a plataforma |
-| **Mobile** | 2.1.20 | Built-in en AGP 9.0.1 | Mismo lenguaje, versión adaptada a plataforma |
+| **Mobile** | 2.2.21 | Configurado en `libs.versions.toml` | Mismo lenguaje, versión adaptada a plataforma |
 | **Wear** | 2.0.21 | Built-in en AGP 9.0.1 | Mismo lenguaje, versión adaptada a plataforma |
 | **:shared** | 2.2.21 | JVM puro, coherente con backend | Mismo lenguaje, versión adaptada a plataforma |
 
@@ -693,18 +699,18 @@ La migración desde monorepo a repo separado con JitPack **ya está completada**
 
 ## 12. Estado de Implementación y Próximos Pasos
 
-| Módulo | Estado | Versión | Notas |
+| Módulo | Estado | Versión `:shared` | Notas |
 |--------|--------|---------|-------|
-| **:shared** | ✅ **IMPLEMENTADO** | 1.0.0 | 40 archivos, 17 tests, JitPack activo. |
-| **ace-backend** | 🔄 Pendiente scaffold | — | Depende de `:shared` vía JitPack. Spring Boot 4.0.6. |
-| **ace-mobile** | 🔄 Pendiente scaffold | — | Depende de `:shared` vía JitPack. AGP 9.0.1. |
-| **ace-wear** | 🔄 Pendiente scaffold | — | NO consume `:shared`. Paths hardcodeados. |
+| **:shared** | ✅ **IMPLEMENTADO** | — | v1.0.4 publicada en JitPack. Repo separado: `reinaldojperalta/ace-shared`. |
+| **ace-backend** | 🔄 S4 Auth implementado, S2/S3/S5/S6/S7/S10 pendiente | 1.0.4 | Spring Boot 4.0.6. |
+| **ace-mobile** | 🔄 En desarrollo | 1.0.4 | AGP 9.0.1, Kotlin 2.2.21. |
+| **ace-wear** | 🔄 HU-06 en desarrollo | ❌ **NO consume** `:shared` | Paths hardcodeados como strings literales locales. |
 
 ### Próximos pasos recomendados
-1. **Backend:** Crear scaffold Spring Boot 4.0.6 con dependencia a `:shared` vía JitPack.
-2. **Mobile:** Crear scaffold Android (AGP 9.0.1) con dependencia a `:shared` vía JitPack.
-3. **Wear:** Implementar envío de FC cruda por DataClient (paths hardcodeados, no `:shared`).
-4. **:shared:** Mantener estable. No breaking changes sin coordinación previa.
+1. **Backend:** Implementar S2/S3/S5/S6/S7/S10 (S4 ya completo).
+2. **Mobile:** Completar integración con backend (auth interceptor, sync, XP).
+3. **Wear:** Implementar envío de FC cruda por DataClient (paths hardcodeados, no `:shared`). **NO consumir** `:shared`.
+4. **:shared:** Mantener estable en v1.0.4. No breaking changes sin coordinación previa.
 
 ---
 
