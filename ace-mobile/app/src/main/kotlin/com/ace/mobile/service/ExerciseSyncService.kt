@@ -14,6 +14,10 @@ import com.ace.mobile.domain.model.ExerciseSession
 import com.ace.mobile.domain.model.HeartRateSample
 import com.ace.mobile.domain.usecase.wear.BuildExerciseBlockUseCase
 import com.ace.mobile.domain.usecase.wear.ReceiveWearDataUseCase
+import com.google.android.gms.wearable.DataMap
+import com.google.android.gms.wearable.MessageClient
+import com.google.android.gms.wearable.MessageEvent
+import com.google.android.gms.wearable.Wearable
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +34,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ExerciseSyncService : Service() {
+class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
 
     companion object {
         const val ACTION_START_SESSION = "com.ace.mobile.START_SESSION"
@@ -44,6 +48,11 @@ class ExerciseSyncService : Service() {
 
         // Para pruebas: 30 segundos
         const val BLOCK_DURATION_MS = 30000L
+
+        private const val TAG = "ExerciseSyncService"
+        private const val PATH_SESSION_STATUS = "/ace/session/"
+        private const val KEY_COMMAND = "command"
+        private const val KEY_SESSION_ID = "sessionId"
     }
 
     @Inject
@@ -70,11 +79,16 @@ class ExerciseSyncService : Service() {
     private val _blockCount = MutableStateFlow(0)
     val blockCount: StateFlow<Int> = _blockCount.asStateFlow()
 
+    // MessageClient para recibir comandos del reloj (STOPPED)
+    private var messageClient: MessageClient? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        messageClient = Wearable.getMessageClient(this)
+        android.util.Log.i(TAG, "ExerciseSyncService creado, MessageClient listo")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -92,7 +106,56 @@ class ExerciseSyncService : Service() {
         return START_STICKY
     }
 
+    /**
+     * Recibe mensajes del reloj via MessageClient.
+     * Se activa cuando el reloj envia STOPPED.
+     */
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        val path = messageEvent.path
+        val data = messageEvent.data
+
+        android.util.Log.d(TAG, "onMessageReceived: path=$path, dataSize=${data.size}")
+
+        if (path.startsWith(PATH_SESSION_STATUS)) {
+            handleSessionStatusMessage(path, data)
+        } else {
+            android.util.Log.w(TAG, "Mensaje con path desconocido: $path")
+        }
+    }
+
+    private fun handleSessionStatusMessage(path: String, data: ByteArray) {
+        try {
+            val dataMap = DataMap.fromByteArray(data)
+            val command = dataMap.getString(KEY_COMMAND, "")
+            val sessionId = dataMap.getString(KEY_SESSION_ID, "")
+
+            android.util.Log.d(TAG, "Comando recibido: command=$command, sessionId=$sessionId")
+
+            when (command) {
+                "STOPPED" -> {
+                    android.util.Log.i(TAG, "STOPPED recibido de reloj: sessionId=$sessionId")
+                    // Detener la sesion desde el servicio
+                    serviceScope.launch(Dispatchers.Main) {
+                        stopSession()
+                    }
+                }
+                else -> {
+                    android.util.Log.w(TAG, "Comando desconocido: $command")
+                }
+            }
+
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Error parseando mensaje de sesion", e)
+        }
+    }
+
     private fun startSession(sessionId: String, sportType: String, userId: String) {
+        android.util.Log.i(TAG, "=== INICIANDO SESION: $sessionId ===")
+
+        // REGISTRAR LISTENER: escuchar STOPPED del reloj
+        messageClient?.addListener(this)
+        android.util.Log.i(TAG, "MessageClient listener registrado para STOPPED")
+
         startForeground(FOREGROUND_NOTIFICATION_ID, buildNotification("Starting...", sportType, 0, 0))
 
         _isCollecting = true
@@ -116,7 +179,7 @@ class ExerciseSyncService : Service() {
             }
         }
 
-        // Recibir datos del reloj
+        // Recibir datos del reloj (FC via DataClient)
         receiveWearDataUseCase.observeHeartRate()
             .onEach { sample ->
                 _lastSampleTime = System.currentTimeMillis()
@@ -133,7 +196,7 @@ class ExerciseSyncService : Service() {
                 checkBlockClosure(sessionId, sportType, userId)
             }
             .catch { e ->
-                android.util.Log.e("ExerciseSyncService", "Error en flow de FC", e)
+                android.util.Log.e(TAG, "Error en flow de FC", e)
                 _isConnected.value = false
             }
             .launchIn(serviceScope)
@@ -152,7 +215,7 @@ class ExerciseSyncService : Service() {
                 _buffer.clear()
 
                 serviceScope.launch(Dispatchers.IO) {
-                    android.util.Log.d("ExerciseSyncService",
+                    android.util.Log.d(TAG,
                         "BLOCK CLOSED: ${samplesForBlock.size} samples, " +
                                 "${durationMs / 1000}s duration, " +
                                 "avgBPM: ${samplesForBlock.map { it.bpm }.average()}")
@@ -168,7 +231,18 @@ class ExerciseSyncService : Service() {
     }
 
     private fun stopSession() {
+        if (!_isCollecting) {
+            android.util.Log.w(TAG, "stopSession llamado pero no hay sesion activa")
+            return
+        }
+
+        android.util.Log.i(TAG, "=== DETENIENDO SESION ===")
+
         _isCollecting = false
+
+        // DESREGISTRAR LISTENER: ya no escuchamos STOPPED
+        messageClient?.removeListener(this)
+        android.util.Log.i(TAG, "MessageClient listener desregistrado")
 
         synchronized(_buffer) {
             if (_buffer.isNotEmpty()) {
@@ -177,7 +251,7 @@ class ExerciseSyncService : Service() {
 
                 // Procesar bloque final corto
                 serviceScope.launch(Dispatchers.IO) {
-                    android.util.Log.d("ExerciseSyncService",
+                    android.util.Log.d(TAG,
                         "Final block: ${samples.size} samples, " +
                                 "${(samples.last().timestamp - samples.first().timestamp)/1000}s")
                     // TODO: Guardar bloque final en SQLite
@@ -189,6 +263,8 @@ class ExerciseSyncService : Service() {
         serviceScope.cancel()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+
+        android.util.Log.i(TAG, "ExerciseSyncService detenido y destruido")
     }
 
     private fun updateNotification(sportType: String) {
@@ -247,8 +323,10 @@ class ExerciseSyncService : Service() {
     }
 
     override fun onDestroy() {
+        messageClient?.removeListener(this)
         serviceScope.cancel()
         super.onDestroy()
+        android.util.Log.i(TAG, "ExerciseSyncService onDestroy")
     }
 }
 
