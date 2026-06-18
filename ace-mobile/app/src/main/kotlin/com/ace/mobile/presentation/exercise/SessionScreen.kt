@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ace.shared.enums.SportType
@@ -30,6 +31,7 @@ fun SessionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val currentSession by viewModel.currentSession.collectAsState()
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -123,7 +125,6 @@ fun SessionActiveContent(
 
     Spacer(modifier = Modifier.height(32.dp))
 
-    // Aquí irían los datos en vivo del reloj (FC, timer, etc.)
     Text("Waiting for heart rate data...", style = MaterialTheme.typography.bodyMedium)
 
     Spacer(modifier = Modifier.height(32.dp))

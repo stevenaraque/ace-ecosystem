@@ -11,7 +11,13 @@ El backend tiene una base sólida y funcional, pero requiere una corrección cr�
 *   ✅ **Paso 3 (RefreshTokenService con SELECT FOR UPDATE):** Completado. El servicio de rotación está implementado y se añadió el bloqueo `PESSIMISTIC_WRITE` a `RefreshTokenRepository.kt` para prevenir race conditions.
 
 ## 2. Estado del Mobile (Pasos 5 - 9)
-Confirmando tu intuición, la mayor parte del trabajo restante está en el cliente móvil. Todo el almacenamiento local seguro, la intercepción de red y la UI de login están pendientes.
+El cliente móvil tiene una base sólida y funcional, pero requiere una corrección crítica de seguridad para cumplir con el diseño arquitectónico.
+
+     ✅ **Paso 5 (Almacenamiento Local Seguro):** Completado. Se integró la persistencia en el dispositivo para salvaguardar el access_token, el refresh_token, el cálculo de token_expires_at y el device_id de forma aislada y protegida.
+     ✅ **Paso 6 (UI de Login):** Completado. La pantalla de inicio de sesión está totalmente conectada y consume correctamente el servicio de autenticación inicial.
+     ✅ **Paso 7 (AuthInterceptor e Inyección de Red):** Completado. El interceptor añade de forma transparente el header Authorization: Bearer <token> en las rutas privadas y procesa la lógica de renovación automática al detectar el token expirado.
+     ✅ **Paso 8 (Control de Race Conditions):** Completado. Se implementó la serialización en el móvil mediante el flag isRefreshing, encolando con éxito las peticiones paralelas para evitar múltiples refrescos  concurrentes.
+     ✅ **Paso 9 (Revocación y Logout):** Completado. El flujo de cierre de sesión limpia el estado local y notifica correctamente al servidor.
 
 ## 3. Notas Importantes para Coherencia (Backend ↔ Mobile)
 Al implementar los pasos del móvil, debes tener en cuenta los siguientes detalles de cómo está programado el backend actualmente para evitar fallos de conexión:
