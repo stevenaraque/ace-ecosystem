@@ -14,34 +14,25 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
-/**
- * Modulo de Hilt para proveer clientes del Wear OS Data Layer.
- */
 @Module
 @InstallIn(SingletonComponent::class)
 object WearDataLayerModule {
 
     @Provides
     @Singleton
-    fun provideDataClient(
-        @ApplicationContext context: Context
-    ): DataClient {
+    fun provideDataClient(@ApplicationContext context: Context): DataClient {
         return Wearable.getDataClient(context)
     }
 
     @Provides
     @Singleton
-    fun provideMessageClient(
-        @ApplicationContext context: Context
-    ): MessageClient {
+    fun provideMessageClient(@ApplicationContext context: Context): MessageClient {
         return Wearable.getMessageClient(context)
     }
 
     @Provides
     @Singleton
-    fun provideNodeClient(
-        @ApplicationContext context: Context
-    ): NodeClient {
+    fun provideNodeClient(@ApplicationContext context: Context): NodeClient {
         return Wearable.getNodeClient(context)
     }
 }
