@@ -214,6 +214,10 @@ class SessionViewModel @Inject constructor(
         logDiag("Sesion DETENIDA por movil: $sessionId")
     }
 
+    /**
+     * Usuario presiona DETENER en el reloj.
+     * Detiene UI, detiene monitoreo de FC, y notifica al movil.
+     */
     fun onStopButtonClicked() {
         val sessionId = currentSessionId
         if (sessionId == null) {
@@ -222,9 +226,9 @@ class SessionViewModel @Inject constructor(
         }
 
         logDiag("Boton DETENER presionado por usuario")
-        logDiag("Enviando STOPPED al movil: $sessionId")
+        logDiag("Deteniendo sesion: $sessionId")
 
-        // Detener UI INMEDIATAMENTE (no esperar al envio)
+        // Detener UI INMEDIATAMENTE
         currentSessionId = null
         pendingSessionId = null
         stopTimer()
@@ -235,15 +239,11 @@ class SessionViewModel @Inject constructor(
         )
         logDiag("UI detenida localmente")
 
-        // Enviar STOPPED al movil en background
-        viewModelScope.launch {
-            try {
-                wearMessageClient.sendStoppedToMobile(sessionId)
-                logDiag("STOPPED enviado al movil OK")
-            } catch (e: Exception) {
-                logDiag("ERROR enviando STOPPED: ${e.message}")
-            }
-        }
+        // Detener monitoreo de FC y enviar STOPPED al movil
+        // WearHealthRepository.stopSession() hace ambas cosas:
+        // 1. healthServicesManager.stopHeartRateMonitoring()
+        // 2. wearMessageClient.sendStoppedToMobile(sessionId)
+        wearHealthRepository.stopSession(sessionId)
     }
 
     override fun onCleared() {
