@@ -1,8 +1,8 @@
 # A.C.E — Implementation Plan: Backend (`ace-backend`)
 
 > **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.3  
-> **Versión:** 4.2 (Actualizado: `:shared` v1.0.4, estado S4 Auth implementado, estructura de paquetes por definir)  
-> **Fecha:** 2026-06-18  
+> **Versión:** 4.3 (Migración a estructura por-feature + Dockerfile mejorado + gradlew tracked + application-prod.yml)  
+> **Fecha:** 2026-06-19  
 > **Stack:** Spring Boot 4.0.6 · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · PostgreSQL 16 · Flyway 10.15 · kotlinx-serialization  
 > **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.4 (JitPack)  
 > **Responsables:** Reinaldo, Santiago (Backend)
@@ -25,6 +25,12 @@ El backend es la **única fuente de verdad** para:
 **Regla de oro:** El backend **NUNCA** recalcula XP desde cero. Solo valida que la XP reportada por el móvil sea consistente con las métricas del bloque (S5 §4.1).
 
 **Nota sobre :shared:** El backend consume el módulo `:shared` vía **JitPack** como artifact Maven externo. No se incluye como `project(":shared")` ni como JAR local en `libs/`. La coordenada exacta es `com.github.reinaldojperalta:ace-shared`.
+
+**Despliegue y Entorno:** El proyecto cuenta con un `Dockerfile` optimizado que utiliza `gradlew` (wrapper 9.5.1), activa `SPRING_PROFILES_ACTIVE=prod` cargando `application-prod.yml` y usa runtime `jammy` (Debian) para despliegue en plataformas como Render.
+
+### Estado Real por Sistema (a fecha 2026-06-19)
+- **S4 (Auth):** ✅ Totalmente implementado en `auth/`.
+- **S1, S2, S3, S5, S6, S7, S9, S10:** ❌ No implementados (esquema SQL presente en Flyway V1–V4, pero esqueletos vacíos en código).
 
 ---
 
@@ -163,111 +169,40 @@ tasks.withType<Test> {
 
 ```
 ace-backend/
-├── build.gradle.kts                      # Kotlin DSL, Spring Boot 4.0.6, Kotlin 2.2.21, compilerOptions DSL
+├── build.gradle.kts
 ├── settings.gradle.kts
-├── gradle/wrapper/
-│
-├── src/main/kotlin/com/ace/backend/
+├── gradlew               # Trackeado para CI/CD (Render)
+├── Dockerfile            # Configurado para jammy, perfil prod, y JVM tuning
+├── src/main/kotlin/sena/adso/ace_backend/
 │   ├── AceBackendApplication.kt
 │   │
 │   ├── config/
-│   │   ├── SecurityConfig.kt             # CORS, CSRF deshabilitado (API stateless)
-│   │   ├── JwtConfig.kt                  # Secret, issuer, TTL access/refresh
-│   │   └── WebConfig.kt                  # Timezone UTC, logging
-│   │
-│   ├── domain/                             # ENTIDADES JPA PURAS — sin anotaciones de servicio
-│   │   ├── user/
-│   │   │   ├── User.kt                     # id, email, password_hash, role, created_at
-│   │   │   ├── UserProfile.kt              # nickname, weight, birth_date, city_id (FK)
-│   │   │   └── UserStreak.kt               # current_streak, best_streak, last_exercise_date (S7)
-│   │   ├── exercise/
-│   │   │   ├── ExerciseSession.kt          # id, user_id, sport_type, started_at, ended_at, status
-│   │   │   ├── ExerciseBlock.kt            # id (UUID del móvil), session_id, device_id, metrics_jsonb, xp_awarded
-│   │   │   └── SportType.kt                # Enum interno (mapea desde :shared para JPA)
-│   │   ├── gamification/
-│   │   │   ├── UserRank.kt                 # user_id, current_rank, total_xp, updated_at
-│   │   │   ├── RankCatalog.kt              # BRONZE=0, SILVER=100, GOLD=250... (seed inicial)
-│   │   │   └── XpTransaction.kt            # id, user_id, block_id, amount, balance_after, reason, timestamp (S5 §5.2)
-│   │   ├── ranking/
-│   │   │   ├── RankingGlobal.kt            # user_id, position (indexed), total_xp, updated_at (S6 §3.2)
-│   │   │   └── RankingMunicipal.kt         # user_id, city_id, position (indexed), total_xp, updated_at
-│   │   ├── auth/
-│   │   │   └── RefreshToken.kt             # token_hash, user_id, device_id, expires_at, revoked_at, replaced_by (S4 §2.3)
-│   │   └── audit/                          # TABLAS VACÍAS EN MVP — listas para máximo
-│   │       ├── SuspicionAudit.kt
-│   │       └── SessionGpsPoint.kt
-│   │
-│   ├── repository/                         # Spring Data JPA — interfaces, cero lógica
-│   │   ├── UserRepository.kt
-│   │   ├── ExerciseBlockRepository.kt
-│   │   ├── ExerciseSessionRepository.kt
-│   │   ├── RefreshTokenRepository.kt
-│   │   ├── XpTransactionRepository.kt
-│   │   ├── UserStreakRepository.kt
-│   │   ├── UserRankRepository.kt
-│   │   ├── RankingGlobalRepository.kt
-│   │   └── RankingMunicipalRepository.kt
-│   │
-│   ├── service/                            # LÓGICA DE NEGOCIO — donde viven las reglas
-│   │   ├── auth/
-│   │   │   ├── AuthService.kt              # Login, registro, hash BCrypt
-│   │   │   ├── JwtService.kt               # Generar/validar access token (stateless, Singleton)
-│   │   │   └── RefreshTokenService.kt      # Crear, validar, revocar con SELECT FOR UPDATE (S4 §6.3)
-│   │   ├── exercise/
-│   │   │   ├── BlockProcessingService.kt     # Recibe batch, valida tamaño ≤ 20, persiste con ON CONFLICT DO NOTHING (S3 §4.5)
-│   │   │   └── SessionValidationService.kt   # Valida 1 ACTIVE por usuario, aborta anterior si es nueva (S2 §2.4)
-│   │   ├── gamification/
-│   │   │   ├── XpValidationService.kt      # VALIDA sanidad de XP (NO calcula). Strategy por deporte. (S5 §4)
-│   │   │   ├── RunningXpValidator.kt         # Reglas de validación para RUNNING (S5 §4.3)
-│   │   │   ├── CyclingXpValidator.kt         # Stub para futuro deportes
-│   │   │   ├── RankService.kt                # Evalúa si usuario sube de rango (S5 §7)
-│   │   │   └── XpFormulaService.kt          # Expone GET /api/xp/formulas con X-Formula-Version (S5 §2.3)
-│   │   ├── ranking/
-│   │   │   └── RankingService.kt             # Recalcula tablas materializadas cada 1h (S6 §2)
-│   │   ├── streak/
-│   │   │   └── StreakEvaluationService.kt      # Evalúa racha al validar bloque (S7 §2)
-│   │   └── stats/
-│   │       └── StatsValidationService.kt     # Valida consistencia client_stats vs bloques (S10 §4)
-│   │
-│   ├── controller/                         # REST Controllers — solo delegan, deserializan DTOs de :shared
-│   │   ├── AuthController.kt               # POST /api/auth/login, /refresh, /register, /logout
-│   │   ├── ExerciseController.kt           # POST /api/exercise/blocks (batch ≤ 20)
-│   │   ├── RankingController.kt            # GET /api/ranking/global, /municipal/{cityId}
-│   │   ├── UserController.kt               # GET /api/user/profile, /stats
-│   │   └── XpFormulaController.kt          # GET /api/xp/formulas (S5 §2.3)
-│   │
-│   ├── dto/                                # NO USAR — todos los DTOs vienen de :shared vía JitPack
-│   │   └── [vacío — importar desde com.ace.shared.dto.*]
+│   │   └── SecurityConfig.kt
 │   │
 │   ├── security/
-│   │   ├── JwtAuthenticationFilter.kt      # Valida access token en cada request (stateless)
-│   │   └── CustomUserDetailsService.kt       # Carga User desde DB para Spring Security
+│   │   └── JwtAuthenticationFilter.kt
 │   │
-│   ├── exception/
-│   │   └── GlobalExceptionHandler.kt         # @ControllerAdvice: 401, 403, 409, 422, 429
+│   ├── auth/                                # FEATURE COMPLETA (S4)
+│   │   ├── controller/AuthController.kt
+│   │   ├── model/User.kt, RefreshToken.kt
+│   │   ├── repository/UserRepository.kt, RefreshTokenRepository.kt
+│   │   └── service/AuthService.kt, JwtService.kt, RefreshTokenService.kt
 │   │
-│   └── scheduler/
-│       ├── RankingRecalculationJob.kt        # @Scheduled(cron = "0 0 * * * *") — cada hora (S6 §2.2)
-│       └── TokenCleanupJob.kt              # Elimina refresh tokens expirados hace > 30 días (S4 §7.3)
+│   ├── exercise/                            # Esqueleto (S2, S3)
+│   ├── ranking/                             # Esqueleto (S6)
+│   ├── streak/                              # Esqueleto (S7)
+│   ├── user/                                # Esqueleto (S1)
+│   └── xp/                                  # Esqueleto (S5, S10)
 │
 ├── src/main/resources/
 │   ├── application.yml
 │   ├── application-dev.yml
-│   ├── application-prod.yml
+│   ├── application-prod.yml                 # DB Supabase remota, Actuator restringido
 │   └── db/migration/
-│       ├── V1__init_schema.sql             # Todas las tablas (Opción B), constraints mínimas
-│       ├── V2__seed_rank_catalog.sql       # Bronce, Plata, Oro...
-│       ├── V3__seed_city_catalog.sql       # Bogotá, Medellín, Cali...
-│       └── V4__add_indexes.sql             # Índices en ranking.position, xp_transactions.user_id, etc.
-│
-├── src/test/
-│   ├── unit/                               # Tests aislados: XpValidator, JwtService, StreakEvaluation
-│   └── integration/                        # TestContainers PostgreSQL
-│       ├── AuthIntegrationTest.kt          # JWT refresh, rotación, race condition
-│       ├── ExerciseBlockIntegrationTest.kt   # Batch, idempotencia, validación 422
-│       └── StreakIntegrationTest.kt          # Evaluación de racha con bloques atrasados
-│
-└── docker-compose.yml                      # PostgreSQL 16 + pgAdmin
+│       ├── V1__init.sql
+│       ├── V2__xp_transactions.sql
+│       ├── V3__ranking_materialized.sql
+│       └── V4__seed_data.sql
 ```
 
 ---
@@ -317,7 +252,7 @@ ace-backend/
 ### Fase Mínima (Semanas 1-4) — TODOS los sistemas S1-S10 presentes
 
 - [ ] Esqueleto Spring Boot 4.0.6 + Kotlin 2.2.21 + compilerOptions DSL + `:shared` vía JitPack
-- [ ] PostgreSQL local con Docker Compose
+- [ ] PostgreSQL remoto configurado en perfil prod.
 - [ ] Flyway V1: todas las tablas (Opción B), V2: seeds rangos/ciudades, V3: índices
 - [ ] **S4 Auth:** Registro/login, JWT híbrido (access 15min / refresh 7días), tabla `refresh_tokens` con **SELECT FOR UPDATE** en rotación
 - [ ] **S4 Auth:** Endpoint `/api/auth/refresh` con rotación atómica y detección de **REFRESH_REUSED**

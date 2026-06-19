@@ -1,10 +1,10 @@
 # A.C.E — Implementation Plan: Mobile (`ace-mobile`)
 
 > **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.2  
-> **Versión:** 4.1 (Actualizado: JitPack para :shared, AGP 9.0 + Built-in Kotlin + Hilt 2.59.2 + KSP)  
-> **Fecha:** Junio 2026  
-> **Stack:** Android 13+ (API 33) · Kotlin 2.1.20 (built-in) · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Wear OS Data Layer API · Retrofit 2.11.0 + Gson · Hilt 2.59.2 · Room 2.6.1 · Jetpack Compose BOM 2024.09.00 · KSP 2.1.20-1.0.32  
-> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.0+ (JitPack)  
+> **Versión:** 4.3 (Actualizado: Kotlin 2.2.21, legacy.kapt, ace-shared 1.0.4, estado de integración)  
+> **Fecha:** 2026-06-19  
+> **Stack:** Android 13+ (API 33) · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Wear OS Data Layer API · Retrofit 2.11.0 + Gson · Hilt 2.59.2 · Room 2.6.1 · Jetpack Compose BOM 2024.09.00 · legacy.kapt  
+> **Depende de:** `com.github.reinaldojperalta:ace-shared:1.0.4` (JitPack)  
 > **Responsable:** Steven Araque (Mobile/Wear Lead) · Integración con Reinaldo/Santiago (Backend)
 
 ---
@@ -17,7 +17,7 @@ El módulo `:mobile` es el **orquestador, traductor, calculador y buffer** del e
 2. **Agrupa** en bloques de ~300 segundos (S2).
 3. **Calcula XP localmente** usando fórmulas cacheadas del backend (S5).
 4. **Muestra recompensa inmediata** al usuario, offline (S5).
-5. **Persiste** bloques, sesiones, historial, estadísticas y tokens en SQLite (S2, S3, S9, S10, S4).
+5. **Persistencia** bloques, sesiones, historial, estadísticas y tokens en SQLite (S2, S3, S9, S10, S4). Nota: Los tokens van en Room plano (`LocalUserEntity`), no en EncryptedSharedPreferences.
 6. **Sincroniza** batches de máximo 20 bloques + estadísticas con el backend (S3, S10).
 7. **Notifica** al usuario: sesión activa (foreground), recordatorio de racha 20:00, errores de sync (S8).
 8. **Cachea** ranking, racha, estadísticas para uso offline (S6, S7, S10).
@@ -26,7 +26,13 @@ El módulo `:mobile` es el **orquestador, traductor, calculador y buffer** del e
 
 **Regla de oro:** El móvil **calcula XP primario**, el backend **valida**. El móvil **no decide** si la racha sube o se rompe, solo **cachea** lo que el backend dice (S7 §2.1).
 
-**Nota sobre :shared:** El móvil consume el módulo `:shared` vía **JitPack** como artifact Maven externo. La coordenada exacta es `com.github.reinaldojperalta:ace-shared`. No se incluye como `project(":shared")` ni como JAR local.
+**Nota sobre :shared:** El móvil consume el módulo `:shared` vía **JitPack** como artifact Maven externo. La coordenada exacta es `com.github.reinaldojperalta:ace-shared:1.0.4`. No se incluye como `project(":shared")` ni como JAR local.
+
+### Estado Real por Sistema (a fecha 2026-06-19)
+- **S1 (Sensor):** ✅ Implementado (`WearDataSource`).
+- **S4 (Auth):** ✅ Implementado.
+- **S2 (Session):** 🟡 Funcional, el cierre de bloque (duración >= 30s) ya se persiste (`ExerciseSyncService.kt`), falta conexión para enviarlo al backend.
+- **S3, S5, S6, S7, S9, S10:** ❌ Esqueletos, sin implementar.
 
 ---
 
@@ -46,7 +52,7 @@ El módulo `:mobile` es el **orquestador, traductor, calculador y buffer** del e
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.legacy.kapt)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -100,7 +106,7 @@ android {
 dependencies {
     // ─── :shared vía JitPack ───
     // Coordenada exacta: JitPack sobrescribe group a com.github.reinaldojperalta
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.4")
 
     // ─── Kotlin & Corrutinas ───
     implementation(libs.kotlin.stdlib)
@@ -134,7 +140,7 @@ dependencies {
     // ─── Room ───
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
+    kapt(libs.room.compiler)
 
     // ─── WorkManager ───
     implementation(libs.work.runtime.ktx)
@@ -147,9 +153,9 @@ dependencies {
 
     // ─── Hilt (DI) ───
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
+    kapt(libs.hilt.compiler)
     implementation(libs.hilt.work)
-    ksp(libs.hilt.work.compiler)
+    kapt(libs.hilt.work.compiler)
     implementation(libs.hilt.navigation.compose)
 
     // ─── DataStore ───
@@ -179,12 +185,12 @@ dependencies {
 | **:shared** | `project(":shared")` | `project(":shared")` o JAR local | **JitPack `com.github.reinaldojperalta:ace-shared`** | Repo separado, compilación automática, sin JAR manual. |
 | **Repositorios** | google + mavenCentral | google + mavenCentral | **google + mavenCentral + JitPack** | JitPack añadido para resolver :shared. |
 | **Plugin Kotlin Android** | `org.jetbrains.kotlin.android` | **Eliminado** | Eliminado | Built-in en AGP 9.0. No se declara. |
-| **Plugin kapt** | `org.jetbrains.kotlin.kapt` | **Eliminado** | Eliminado | Incompatible con built-in Kotlin. Mobile usa **KSP**. |
+| **Plugin kapt** | `org.jetbrains.kotlin.kapt` | **Revertido a legacy** | Usado | KSP dio problemas. Se usa `legacy.kapt`. |
 | `kotlinOptions { jvmTarget }` | `"21"` explícito | **Eliminado** | Eliminado | `compileOptions` Java 21 es suficiente; AGP 9.0 infiere automáticamente. |
 | `composeOptions { kotlinCompilerExtensionVersion }` | `"1.5.14"` explícito | **Eliminado** | Eliminado | El plugin `org.jetbrains.kotlin.plugin.compose` gestiona el compiler automáticamente. |
 | Hilt | `2.52` | **`2.59.2`** | 2.59.2 | Hilt 2.52 accede a `BaseExtension` removida en AGP 9.0. 2.59.2+ es compatible. |
-| Annotation Processing | `kapt` (estándar) | **KSP** | KSP | KSP es el estándar moderno para AGP 9.0. Mobile usa KSP; Wear usa `legacy-kapt` por incompatibilidades específicas documentadas. |
-| Kotlin | `2.1.0` (plugin explícito) | **`2.1.20` (built-in)** | 2.1.20 | Android Studio Otter 3 genera 2.1.20 built-in. Compatible con el ecosistema. |
+| Annotation Processing | `kapt` (estándar) | **legacy.kapt** | legacy.kapt | KSP falló. Mobile usa `legacy.kapt`. |
+| Kotlin | `2.1.0` (plugin explícito) | **`2.2.21`** | 2.2.21 | Versión unificada con el ecosistema. |
 
 ---
 
@@ -354,9 +360,8 @@ ace-mobile/
 |----------|-------|---------------|-----------|----------|
 | **:shared vía JitPack** | `com.github.reinaldojperalta:ace-shared` | Repo separado, compilación automática por tag, sin JAR manual. | Requiere tag + push para actualizar. No hay "snapshot local" compartido. | — |
 | **AGP 9.0.1** | Sí | Generado por Android Studio Otter 3. Built-in Kotlin reduce configuración. | Requiere Hilt 2.59.2+ (2.52 rompe con `BaseException`). | — |
-| **Built-in Kotlin (AGP 9.0)** | Sí | No requiere plugin `org.jetbrains.kotlin.android`. Menos boilerplate. | `org.jetbrains.kotlin.kapt` es incompatible; mobile usa KSP. | — |
-| **KSP** | Sí | Estándar moderno para annotation processing en AGP 9.0. Más rápido que kapt. | Curva de aprendizaje. Room y Hilt requieren configuración específica. | — |
-| **Kotlin 2.1.20** | Sí | Built-in en AGP 9.0.1. Compatible con KSP 2.1.20-1.0.32. | Plan anterior decía 2.1.0, pero Android Studio genera 2.1.20 y es compatible. | — |
+| **legacy.kapt** | Sí | Estándar de compatibilidad. KSP falló. | Menos rápido que KSP. | — |
+| **Kotlin 2.2.21** | Sí | Versión unificada en el ecosistema. | — | — |
 | **Room (SQLite)** | Sí, para tokens y datos | Coherente con S4 §3.2 (local_user en SQLite). DataStore solo para preferencias. | Más complejidad que DataStore puro. | S4, S9, S10 |
 | **MVVM + Clean** | Sí | Testabilidad. Use Cases puro Kotlin sin Android. | Más boilerplate. | — |
 | **WorkManager** | Sync + Streak + Error | Sobrevive cierre de app, Doze, reinicio. | Configuración inicial más compleja. | S3 §5.2, S7 §4.2, S8 §4 |
@@ -377,8 +382,8 @@ ace-mobile/
 
 ### Fase Mínima (Semanas 1-4) — TODOS los sistemas presentes
 
-- [ ] Esqueleto Android Studio: módulo `:mobile`, AGP 9.0.1, Kotlin 2.1.20 built-in, Hilt 2.59.2, KSP, Compose, Room
-- [ ] Integración con `:shared` vía JitPack: `com.github.reinaldojperalta:ace-shared:1.0.0` (DTOs y enums)
+- [ ] Esqueleto Android Studio: módulo `:mobile`, AGP 9.0.1, Kotlin 2.2.21, Hilt 2.59.2, legacy.kapt, Compose, Room
+- [ ] Integración con `:shared` vía JitPack: `com.github.reinaldojperalta:ace-shared:1.0.4` (DTOs y enums)
 - [ ] **S4 Auth:** Login/Registro UI + AuthRepository + Room `local_user` (tokens, device_id)
 - [ ] **S4 Auth:** `AuthInterceptor` con flag `isRefreshing` + cola de peticiones + manejo `REFRESH_REUSED`
 - [ ] **S1 Sensor:** `WearDataSource` recibe FC por DataClient en path `/ace/health/heart_rate`

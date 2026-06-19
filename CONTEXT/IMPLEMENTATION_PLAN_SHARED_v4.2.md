@@ -1,8 +1,8 @@
 # A.C.E — Implementation Plan: Shared Module (`:shared`)
 
 > **Estado:** ✅ **Implementado y Publicado**  
-> **Versión:** 4.3 (Actualizado: `:shared` v1.0.4; wear NO consume — confirmado)  
-> **Fecha:** 2026-06-18  
+> **Versión:** 4.3 (Actualizado: `:shared` v1.0.4)  
+> **Fecha:** 2026-06-19  
 > **Stack:** Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · kotlinx-serialization 1.8.0 · Gson 2.11.0 · JUnit 5.11.0  
 > **Publicado en:** [JitPack](https://jitpack.io/#reinaldojperalta/ace-shared)  
 > **Depende de:** Apéndices S1, S2, S3, S4, S5, S6, S7, S8, S9, S10 y Arquitectura A.C.E v0.3  
@@ -103,11 +103,11 @@ publishing {
 }
 ```
 
-### 2.2. Notas críticas sobre la actualización v3.0 → v4.0 → v4.1 → v4.2
+### 2.2. Notas críticas sobre la actualización v3.0 → v4.0 → v4.1 → v4.2 → v4.3
 
-| Aspecto | Pre-v4.0 (plan v3.0) | v4.0 (actual) | v4.1 (JitPack) | v4.2 (Implementado) | Justificación |
-|---------|---------------------|---------------|----------------|---------------------|---------------|
-| **Publicación** | GitHub Packages | GitHub Packages | **JitPack** | **JitPack (activo)** | JitPack no requiere configuración de tokens PAT para consumidores. Compilación automática por tag. |
+| Aspecto | Pre-v4.0 | v4.0 | v4.1 | v4.2 | v4.3 (Actual) | Justificación |
+|---------|---------|------|------|------|---------------|---------------|
+| **Publicación** | GitHub | GitHub | **JitPack** | **JitPack** | **JitPack (activo)** | JitPack no requiere configuración de tokens PAT. |
 | **Group Maven** | `com.ace` | `com.ace` | **`com.github.reinaldojperalta`** (sobrescrito por JitPack) | **`com.github.reinaldojperalta`** | JitPack sobrescribe el group. Los consumidores DEBEN usar esta coordenada. |
 | **Repo** | Monorepo `ace-ecosystem` | Monorepo `ace-ecosystem` | **Repo separado** `reinaldojperalta/ace-shared` | **Repo separado (activo)** | Monorepo mixto (JVM + Android) confunde a JitPack. Repo separado = compilación limpia. |
 | **Kotlin** | 2.1.0 | **2.2.21** | 2.2.21 | **2.2.21** | Coherente con backend (baseline Spring Boot 4.0). |
