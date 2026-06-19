@@ -52,42 +52,7 @@
             android:exported="false"
             android:foregroundServiceType="health" />
 
-        <!--
-        SERVICE COMENTADO: WearableListenerService
-        Ya no se usa porque Android 14+ bloquea el bind desde Google Play Services.
-        La recepcion de mensajes ahora esta en ExerciseSyncService via MessageClient.addListener()
-        -->
-        <!--
-        <service
-            android:name="com.ace.mobile.service.WearDataListenerService"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="com.google.android.gms.permission.WEARABLE_BIND_LISTENER">
 
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
-                <data
-                    android:host="*"
-                    android:pathPrefix="/ace/health/heart_rate"
-                    android:scheme="wear" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
-                <data
-                    android:host="*"
-                    android:pathPrefix="/ace/session/"
-                    android:scheme="wear" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="com.google.android.gms.wearable.NODE_CHANGED" />
-                <data
-                    android:host="*"
-                    android:scheme="wear" />
-            </intent-filter>
-        </service>
-        -->
 
     </application>
 

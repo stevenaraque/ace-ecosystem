@@ -14,6 +14,10 @@ import com.ace.mobile.presentation.MainActivity
 import com.ace.mobile.domain.model.HeartRateSample
 import com.ace.mobile.domain.usecase.wear.BuildExerciseBlockUseCase
 import com.ace.mobile.domain.usecase.wear.ReceiveWearDataUseCase
+import com.ace.mobile.data.local.database.dao.BlockDao
+import com.ace.mobile.data.local.database.entity.LocalBlockEntity
+import com.ace.shared.enums.BlockStatus
+import com.ace.shared.enums.SportType
 import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
@@ -36,6 +40,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -73,6 +78,9 @@ class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
     @Inject
     lateinit var buildExerciseBlockUseCase: BuildExerciseBlockUseCase
 
+    @Inject
+    lateinit var blockDao: BlockDao
+
     // ─── MessageClient (declarado a nivel de clase, no en onCreate) ───
     private var messageClient: MessageClient? = null
 
@@ -108,6 +116,7 @@ class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
     // ─── Interno ───
     private val _buffer = ArrayDeque<HeartRateSample>(BUFFER_CAPACITY)
     private var _currentSessionId: String? = null
+    private var _currentUserId: String = "unknown"
     private var _lastSampleTime = 0L
     private var _stopRequestedFromMobile = false
 
@@ -199,6 +208,7 @@ class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
 
         android.util.Log.i(TAG, "=== INICIANDO SESION: $sessionId ===")
         _currentSessionId = sessionId
+        _currentUserId = userId
         _sportType.value = sportType
         _isSessionActive.value = true
         _elapsedSeconds.value = 0
@@ -304,11 +314,36 @@ class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
             totalSamples = _buffer.size
             if (_buffer.isNotEmpty()) {
                 val samples = _buffer.toList()
+                val durationMs = samples.last().timestamp - samples.first().timestamp
                 _buffer.clear()
 
                 android.util.Log.d(TAG,
                     "Final block: $totalSamples samples, " +
-                            "${(samples.last().timestamp - samples.first().timestamp) / 1000}s")
+                            "${durationMs / 1000}s")
+                            
+                val sportTypeStr = _sportType.value
+                val sportTypeEnum = try { SportType.valueOf(sportTypeStr) } catch(e: Exception) { SportType.RUNNING }
+                
+                serviceScope.launch(Dispatchers.IO) {
+                    val blockId = UUID.randomUUID().toString()
+                    val entity = LocalBlockEntity(
+                        blockId = blockId,
+                        sessionId = sessionId,
+                        userId = _currentUserId,
+                        timestampStart = samples.first().timestamp,
+                        timestampEnd = samples.last().timestamp,
+                        durationSeconds = (durationMs / 1000).toInt(),
+                        avgBpm = samples.map { it.bpm }.average(),
+                        maxBpm = samples.map { it.bpm }.maxOrNull() ?: 0.0,
+                        minBpm = samples.map { it.bpm }.minOrNull() ?: 0.0,
+                        sampleCount = samples.size,
+                        sportType = sportTypeEnum,
+                        xpCalculated = null, // TODO: Calcular XP usando CalculateBlockXpUseCase (Ver Apendice S5)
+                        status = BlockStatus.PENDING // TODO: Actualizar estadisticas usando AccumulateStatsUseCase (Ver Apendice S10)
+                    )
+                    blockDao.insert(entity)
+                    android.util.Log.i(TAG, "Final block persisted: $blockId")
+                }
             }
         }
 
@@ -351,9 +386,27 @@ class ExerciseSyncService : Service(), MessageClient.OnMessageReceivedListener {
 
                     _blockCount.value += 1
 
-                    // TODO: Guardar bloque en SQLite usando BlockDao
-                    // TODO: Calcular XP usando CalculateBlockXpUseCase
-                    // TODO: Actualizar estadisticas usando AccumulateStatsUseCase
+                    val blockId = UUID.randomUUID().toString()
+                    val sportTypeEnum = try { SportType.valueOf(sportType) } catch(e: Exception) { SportType.RUNNING }
+                    
+                    val entity = LocalBlockEntity(
+                        blockId = blockId,
+                        sessionId = sessionId,
+                        userId = userId,
+                        timestampStart = firstSample.timestamp,
+                        timestampEnd = lastSample.timestamp,
+                        durationSeconds = (durationMs / 1000).toInt(),
+                        avgBpm = samplesForBlock.map { it.bpm }.average(),
+                        maxBpm = samplesForBlock.map { it.bpm }.maxOrNull() ?: 0.0,
+                        minBpm = samplesForBlock.map { it.bpm }.minOrNull() ?: 0.0,
+                        sampleCount = samplesForBlock.size,
+                        sportType = sportTypeEnum,
+                        xpCalculated = null, // TODO: Calcular XP usando CalculateBlockXpUseCase (Ver Apendice S5)
+                        status = BlockStatus.PENDING // TODO: Actualizar estadisticas usando AccumulateStatsUseCase (Ver Apendice S10)
+                    )
+                    
+                    blockDao.insert(entity)
+                    android.util.Log.i(TAG, "Block persisted in Room: $blockId")
                 }
             }
         }

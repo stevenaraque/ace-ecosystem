@@ -1,10 +1,11 @@
 # A.C.E — Handoff: Limpieza y Reorganización del Ecosistema
 
-> **Versión:** 1.1
+> **Versión:** 1.2
 > **Fecha:** 2026-06-19
 > **Tipo:** Tareas de refactor + limpieza + documentación
 > **Origen:** Análisis de coherencia realizado el 2026-06-19 entre el código real y los planes de `CONTEXT/`.
 > **Auditoría previa:** Este documento se generó tras indexar los 3 proyectos (`ace-backend`, `ace-mobile`, `ace-wear`) y cotejarlos con los planes v4.1/v4.2 y los Apéndices S1–S10.
+> **v1.1 → v1.2:** Bloque 6 (wear) marcado COMPLETADO tras pull de un compañero. Decisión final: `:shared` **hibrido** en wear (no unificar).
 
 ---
 
@@ -27,7 +28,7 @@ Este es un documento **delegable**. Cada tarea tiene:
 - ✅ Backend: estructura **por-feature** es la deseada.
 - ✅ Credenciales hardcodeadas en `application.yml` **se quedan** (efectos prácticos del proyecto académico). No mover a `.env`.
 - ✅ **Dockerfile se CONSERVA** — se usa para despliegue en Render. NO borrar.
-- ✅ **Wear SÍ consume `:shared`** (decisión del equipo). Documentarlo así.
+- ✅ **Wear consume `:shared` en modo HIBRIDO** (decisión final del equipo): `WearMessageClient` usa `DataLayerPaths` de `:shared`; `WearDataClient` usa `WearDataLayerPaths` local. **No unificar** — la sincronización de paths entre ambos es manual e intencional.
 - ✅ Los archivos `nul` **no se pueden eliminar** (residuo de una sesión previa con cuota agotada). No insistir; ya están en `.gitignore`.
 - ✅ El `reporte_estado_auth.md` ya fue corregido y consolidado en `CONTEXT/`.
 
@@ -217,54 +218,77 @@ El auth **ya está implementado** (S4 completo), así que el TODO es absurdo.
 
 ---
 
-## BLOQUE 6 — Wear: documentar consumo de `:shared` y corregir la contradicción
+## BLOQUE 6 — ✅ COMPLETADO: Wear — interacción UseCases + decisión `:shared` hibrido
 
-### 6.1 Contradicción a resolver
-- `WearMessageClient.kt:6` hace `import com.ace.shared.constants.DataLayerPaths`.
-- `WearDataClient.kt` define su propio `WearDataLayerPaths` local con un KDoc que dice "El wear NO consume el módulo `:shared`".
-- El plan `IMPLEMENTATION_PLAN_WEAROS_v4.2.md` (§2, §8) afirma rotundamente "wear NO consume `:shared`".
+> **Estado:** Resuelto por un compañero del equipo (merge `e356683`). Se verificó tras `pull` el 2026-06-19.
+> Solo resta **documentación** del plan (§6.5).
 
-**Decisión del humano (NO negociable):** wear **SÍ consume `:shared`** y se queda así.
+### 6.1 Lo que se hizo (verificado en código)
 
-### 6.2 Acciones
-1. **`WearDataClient.kt`:** eliminar el objeto local `WearDataLayerPaths` y reemplazar sus usos por `com.ace.shared.constants.DataLayerPaths` (el mismo que ya usa `WearMessageClient`). Unificar en una sola fuente de verdad.
-2. **`app/build.gradle.kts`:** confirmar que la dependencia JitPack `com.github.reinaldojperalta:ace-shared:1.0.4` está declarada. Si no lo está, añadirla (igual que en mobile). Si el import funciona hoy, probablemente ya está.
-3. **`settings.gradle.kts`:** confirmar el repo `maven { url = uri("https://jitpack.io") }`.
+**Arquitectura Clean completada — el ViewModel ya no habla directo con el repositorio:**
 
-### 6.3 `StartExerciseUseCase` y la duplicación de listener — explicación y arreglo
+1. **`StartExerciseUseCase`** revive con 2 métodos:
+   - `operator fun invoke()` → inicializa el repositorio (llamado desde `SessionViewModel.initialize()`).
+   - `fun startSession(sessionId: String)` → activa el sensor de FC.
+2. **`StopExerciseUseCase`** gana 2 métodos:
+   - `operator fun invoke(sessionId: String)` → detiene sesión (sensor + notifica al móvil).
+   - `fun dispose()` → limpia recursos al cerrar la app.
+3. **`SessionViewModel`** ya **NO inyecta `WearHealthRepository`**:
+   - `initialize()` → `startExerciseUseCase()`.
+   - `handleStopFromMobile(sessionId)` → `stopExerciseUseCase(sessionId)` + `stopSessionInternal()` (solo UI).
+   - `onStopButtonClicked()` → `stopExerciseUseCase(sessionId)` + `stopSessionInternal()`.
+   - `dispose()` → `stopExerciseUseCase.dispose()`.
+4. **`WearHealthRepository`** perdió la responsabilidad de escuchar comandos:
+   - Eliminó la suscripción a `wearMessageClient.commands`.
+   - Eliminó `onStartCommand()` / `onStopCommand()` privados.
+   - Expone `startSession(sessionId)` y `stopSession(sessionId)` públicos (llamados por los use cases).
+   - `initialize()` ahora solo escucha muestras de FC para enviar al móvil.
+5. **Registro único del listener de `MessageClient`:** `WearApplication.onCreate()` es el ÚNICO lugar que llama a `wearMessageClient.startListening()` (comentario actualizado: *"UNICO lugar donde se registra el listener"*).
 
-**Problema diagnosticado (explicado al humano):**
+### 6.2 Decisión `:shared` — HIBRIDO (NO negociable)
 
-Hay **dos registros** del listener de `WearMessageClient`:
-1. `WearApplication.onCreate()` (línea 36): `wearMessageClient.startListening()`.
-2. `SessionViewModel.initialize()` (línea 168) → `wearHealthRepository.initialize()` → (línea 73) `wearMessageClient.startListening()`.
+El consumo de `:shared` en wear quedó **hibrido** y así se mantiene:
 
-`MessageClient.addListener` **no deduplica**, así que cada START se procesa dos veces. No rompe (el flag `isSessionActive` del repositorio absorbe el duplicado con un "sesión ya activa, ignorando"), pero es ineficiente.
+| Archivo | Fuente de paths | Estado |
+|---|---|---|
+| `app/build.gradle.kts:55` | — | `implementation(libs.ace.shared)` ✅ declarado |
+| `gradle/libs.versions.toml` | — | `ace-shared = "1.0.4"` ✅ |
+| `WearMessageClient.kt:6` | `com.ace.shared.constants.DataLayerPaths` | Importa de `:shared` ✅ |
+| `WearDataClient.kt:24` | `WearDataLayerPaths` (objeto LOCAL) | Define sus propios paths como strings literales |
 
-**Además, `StartExerciseUseCase` está muerto:** existe, se inyecta en el constructor de `SessionViewModel`, pero `initialize()` (línea 168) llama **directo** a `wearHealthRepository.initialize()` en vez de al use case.
+**Regla de coherencia hibrida:** los valores en `WearDataLayerPaths` (local) **deben coincidir manualmente** con `com.ace.shared.constants.DataLayerPaths` (del módulo `:shared`). Si alguien cambia un path en `:shared`, debe actualizar `WearDataClient.WearDataLayerPaths` en paralelo. Es un punto de desync intencional y aceptado.
 
-**Arreglo recomendado (Opción A — mínima):**
-1. En `WearApplication.onCreate()`: **eliminar** la línea `wearMessageClient.startListening()` (y su log). El repositorio queda como único dueño del registro del listener.
-2. En `SessionViewModel`: **inyectar** `StartExerciseUseCase` (ya está en el grafo Hilt) y en `initialize()` (línea 168) reemplazar:
-   ```kotlin
-   wearHealthRepository.initialize()       // antes
-   ```
-   por:
-   ```kotlin
-   startExerciseUseCase()                  // después
-   ```
-   Así el use case deja de ser código muerto y se respeta la capa Clean (ViewModel → use case → repositorio, no ViewModel → repositorio directo).
-3. El `StopExerciseUseCase` **sí se usa** en `dispose()` (línea 257). Dejarlo.
+> **No unificar.** Esta es la decisión final del equipo. No eliminar `WearDataLayerPaths` ni reemplazarlo por `DataLayerPaths`.
 
-**Resultado esperado:** un solo registro del listener, los dos use cases vivos, arquitectura Clean respetada.
+### 6.3 Registro único del listener
 
-### 6.4 Documentar en el plan de Wear
+Decisión tomada por el compañero (difiere de la recomendación original del handoff, pero es **igual de válida**): el listener se registra **solo en `WearApplication.onCreate()`**, no en el repositorio. Hay un único registro, con dueño claro. No cambiar.
+
+### 6.4 Checklist del Bloque 6 — estado final
+
+| Tarea | Estado |
+|---|---|
+| `StartExerciseUseCase` vivo con `invoke()` + `startSession()` | ✅ Hecho |
+| `StopExerciseUseCase` con `invoke(sessionId)` + `dispose()` | ✅ Hecho |
+| `SessionViewModel` no habla directo con repositorio | ✅ Hecho |
+| `WearHealthRepository` solo orquesta sensor (sin escuchar comandos) | ✅ Hecho |
+| Registro único de `MessageClient` listener (en `WearApplication`) | ✅ Hecho |
+| `ace-shared` bumped a 1.0.4 en `libs.versions.toml` | ✅ Hecho |
+| `:shared` declarado en `build.gradle.kts` | ✅ Hecho |
+| Unificar paths (eliminar hibrido) | ❌ **NO** — decisión: queda hibrido |
+
+### 6.5 Pendiente: solo documentación del plan
+
 Actualizar `CONTEXT/IMPLEMENTATION_PLAN_WEAROS_v4.2.md`:
-- Cabecera: cambiar "NO consume `:shared`" por "**SÍ consume `:shared`** vía JitPack (decisión v4.4)".
-- §2 snippet de dependencias: añadir `implementation(libs.ace.shared)` o la línea JitPack equivalente.
-- §5 tabla de paths: eliminar la columna "Origen en `:shared` (local)" y dejar claro que TODOS los paths vienen de `com.ace.shared.constants.DataLayerPaths`.
-- §8 tabla de decisiones: la fila "`:shared` en wear → ❌ NO consume" debe pasar a "✅ SÍ consume (v4.4)".
-- Añadir sección "v4.2 → v4.4" en el historial de cambios explicando el revert del revert.
+- Cabecera: bump a **v4.4**, fecha 2026-06-19. Nota: *"Arquitectura Clean completada (ViewModel→UseCase→Repository); `:shared` hibrido (MessageClient usa `DataLayerPaths`, DataClient usa `WearDataLayerPaths` local)."*
+- §2 snippet de dependencias: confirmar `implementation(libs.ace.shared)` y `legacy-kapt` con `kapt(libs.hilt.compiler)`.
+- §5 tabla de paths: dejar las DOS fuentes documentadas (hibrido) con la regla de coherencia del §6.2.
+- §8 tabla de decisiones:
+  - Fila "`:shared` en wear" → "**Hibrido** (v4.4): MessageClient consume `DataLayerPaths` de `:shared`; DataClient usa `WearDataLayerPaths` local. Sincronización manual.".
+  - Fila "Registro listener" → "Único registro en `WearApplication.onCreate()`".
+- Añadir sección "v4.2 → v4.4" en el historial de cambios explicando:
+  1. Arquitectura Clean completada (use cases vivos).
+  2. `:shared` hibrido (decisión del equipo).
 
 ---
 
@@ -299,7 +323,7 @@ Reescribir según la realidad:
 
 ### 7.4 `CONTEXT/IMPLEMENTATION_PLAN_SHARED_v4.2.md`
 - Renombrar archivo a `IMPLEMENTATION_PLAN_SHARED_v4.3.md` (la cabecera interna ya dice v4.3).
-- Añadir nota: "Consumido por `ace-backend`, `ace-mobile` Y `ace-wear` (v1.0.4)".
+- Añadir nota: "Consumido por `ace-backend`, `ace-mobile` (vía `DataLayerPaths` + DTOs) Y `ace-wear` (hibrido: `WearMessageClient` usa `DataLayerPaths`; `WearDataClient` tiene su propio `WearDataLayerPaths` local sincronizado manualmente). Versión 1.0.4."
 
 ### 7.5 `CONTEXT/BD-BACKEND.md`
 - Verificar que lista las migraciones reales: `V1__init.sql`, `V2__xp_transactions.sql`, `V3__ranking_materialized.sql`, `V4__seed_data.sql`.
@@ -315,11 +339,15 @@ Reescribir según la realidad:
 
 Tras ejecutar todos los bloques:
 
-- [ ] **Backend:** `./gradlew compileKotlin` pasa. `POST /api/auth/login` funciona. Estructura solo por-feature. Sin `libs/ace-shared-1.0.0.jar`. Sin `Application.kt` duplicado. Sin configs vacíos.
-- [ ] **Backend Dockerfile:** usa `gradlew` (no descarga manual). Perfil `prod` activo. JVM tuneada. Runtime jammy.
-- [ ] **Mobile:** `./gradlew :app:assembleDebug` pasa. Un bloque se persiste en Room tras 30s de sesión. El `userId` real viaja al servicio. `WearDataListenerService` eliminado o marcado NO USAR. Sin `"user-123"` hardcodeado.
-- [ ] **Wear:** `./gradlew :app:assembleDebug` pasa. Un solo registro de `MessageClient` listener. `StartExerciseUseCase` vivo (llamado desde `SessionViewModel.initialize()`). `:shared` declarado y `DataLayerPaths` unificado.
-- [ ] **Docs:** README sin `docker-compose` ni `ace-shared/` local. Planes bumped a v4.3/v4.4 con estado real. Plan de Wear dice "SÍ consume `:shared`". Plan de backend documenta Dockerfile mejorado.
+- [x] **Backend Bloque 1:** Auth migrado a `auth/` por-feature. Layout plano eliminado.
+- [x] **Backend Bloque 2.5:** Dockerfile usa `gradlew` (no descarga manual). Perfil `prod` activo. JVM tuneada. Runtime jammy.
+- [x] **Backend Bloque 2.6:** `application-prod.yml` creado.
+- [ ] **Backend Bloque 2.1-2.4:** Borrar `libs/ace-shared-1.0.0.jar`, configs vacíos (`DatabaseConfig`, `JacksonConfig`, `JwtConfig`, `SchedulingConfig`, `WebConfig`), tests vacíos. `POST /api/auth/login` funciona tras limpieza.
+- [ ] **Mobile Bloque 3:** Un bloque se persiste en Room tras 30s de sesión (`ExerciseSyncService.kt:354-356`).
+- [ ] **Mobile Bloque 4:** El `userId` real viaja al servicio (sin `"user-123"`).
+- [ ] **Mobile Bloque 5:** `WearDataListenerService` eliminado o marcado NO USAR.
+- [x] **Wear Bloque 6:** Un solo registro de `MessageClient` listener (en `WearApplication`). `StartExerciseUseCase` vivo. `StopExerciseUseCase` con `sessionId`. `:shared` hibrido (MessageClient usa `DataLayerPaths`, DataClient usa `WearDataLayerPaths` local). **Decisión final del equipo: NO unificar.**
+- [ ] **Docs Bloque 7:** README sin `docker-compose` ni `ace-shared/` local. Planes bumped a v4.3/v4.4 con estado real. Plan de Wear documenta arquitectura Clean + `:shared` hibrido. Plan de backend documenta Dockerfile mejorado.
 - [ ] **Residuales:** archivos `nul` dejados en paz (en `.gitignore`). `gradlew` del backend commiteado con `+x`.
 
 ---
@@ -352,17 +380,18 @@ ace-backend/src/main/kotlin/sena/adso/ace_backend/
 
 ---
 
-## Apéndice — Archivos nuevos/creados en esta sesión
+## Apéndice — Archivos nuevos/modificados relevantes
 
 | Archivo | Estado | Qué hace |
 |---|---|---|
-| `ace-backend/Dockerfile` | ✅ Modificado | Usa `gradlew` en vez de descargar Gradle 8.14 manualmente. Runtime jammy. Perfil prod. JVM tuning. |
-| `ace-backend/src/main/resources/application-prod.yml` | ✅ Creado | Perfil de producción para Render (pool-size 3, logging WARN/INFO, actuator sin detalles). |
+| `ace-backend/Dockerfile` | ✅ Modificado (sesión 2026-06-19) | Usa `gradlew` en vez de descargar Gradle 8.14 manualmente. Runtime jammy. Perfil prod. JVM tuning. |
+| `ace-backend/src/main/resources/application-prod.yml` | ✅ Creado (sesión 2026-06-19) | Perfil de producción para Render (pool-size 3, logging WARN/INFO, actuator sin detalles). |
 | `ace-backend/gradlew` | ✅ Commiteado (staged) | Script del Gradle Wrapper con permiso `+x` (`100755`). Necesario para que el Dockerfile funcione en Render. |
 | `ace-backend/gradlew.bat` | ✅ Commiteado (staged) | Versión Windows del wrapper (no se usa en Docker pero se trackea para consistencia). |
 | `.gitignore` (raíz) | ✅ Modificado | Excepciones `!ace-backend/gradlew` y `!ace-backend/gradlew.bat` para que lleguen a Render sin ignorar mobile/wear. |
-| `CONTEXT/HANDOFF_CLEANUP_v1.md` | ✅ Creado → v1.1 | Este documento. |
+| `ace-wear/**` (varios) | ✅ Modificado por un compañero (merge `e356683`) | Bloque 6: arquitectura Clean completada (use cases vivos, ViewModel sin tocar repositorio directo), registro único de listener en `WearApplication`, `:shared` hibrido. |
+| `CONTEXT/HANDOFF_CLEANUP_v1.md` | ✅ Creado → v1.2 | Este documento. |
 
 ---
 
-*Documento generado por análisis de coherencia del ecosistema A.C.E. Versión 1.1 — actualiza Bloques 1 y 2 marcándolos como completados tras la sesión del 2026-06-19.*
+*Documento generado por análisis de coherencia del ecosistema A.C.E. Versión 1.2 — marca Bloques 1, 2.5, 2.6 y 6 como completados. Pendientes: Bloque 2.1-2.4 (limpieza backend), Bloque 3 (cierre de bloque mobile), Bloque 4 (userId), Bloque 5 (código muerto mobile), Bloque 7 (documentación).*

@@ -16,15 +16,26 @@ import com.ace.mobile.presentation.auth.LoginScreen
 import com.ace.mobile.presentation.exercise.SessionScreen
 import com.ace.mobile.presentation.profile.ProfileScreen
 import com.ace.mobile.presentation.profile.ProfileViewModel
+import com.ace.mobile.data.local.database.dao.UserDao
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var userDao: UserDao
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+
+                val currentUser by userDao.observeCurrentUser().collectAsState(initial = null)
+                val currentUserId = currentUser?.userId
 
                 val navController = rememberNavController()
 
@@ -57,10 +68,17 @@ class MainActivity : ComponentActivity() {
 
                     // RUTA C: Pantalla de Sesión de Ejercicio (NUEVA)
                     composable("session_screen_route") {
-                        // TODO: Reemplazar "user-123" con el userId real del usuario logueado
-                        SessionScreen(
-                            userId = "user-123" // Temporal hasta integrar auth
-                        )
+                        if (currentUserId != null) {
+                            SessionScreen(
+                                userId = currentUserId
+                            )
+                        } else {
+                            // Si no hay usuario logueado, podríamos redirigir,
+                            // pero como fallback seguro mostramos un error o volvemos a login.
+                            navController.navigate("login_screen_route") {
+                                popUpTo("session_screen_route") { inclusive = true }
+                            }
+                        }
                     }
                 }
             }
