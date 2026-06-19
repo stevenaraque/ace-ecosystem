@@ -6,22 +6,33 @@ import com.ace.wear.data.repository.WearHealthRepository
 import javax.inject.Inject
 
 /**
- * Caso de uso para detener y limpiar el monitoreo de ejercicio.
+ * Caso de uso para detener el monitoreo de ejercicio.
  *
- * Delega a WearHealthRepository que:
- * 1. Detiene HealthServicesManager
- * 2. Detiene escucha de mensajes del movil
- * 3. Limpia recursos
+ * Responsabilidades:
+ * 1. Detener sesion activa (sensor + notificar al movil)
+ * 2. Limpiar recursos al cerrar la app
  *
- * Debe llamarse al cerrar la app (onDestroy de MainActivity).
+ * El reloj no decide; solo reacciona a ordenes del ViewModel.
  */
 class StopExerciseUseCase @Inject constructor(
     private val wearHealthRepository: WearHealthRepository
 ) {
     /**
-     * Libera todos los recursos del repositorio de salud.
+     * Detiene la sesion de ejercicio activa.
+     * - Detiene el sensor de FC
+     * - Notifica al movil que el reloj detuvo
+     *
+     * @param sessionId ID de la sesion a detener
      */
-    operator fun invoke() {
+    operator fun invoke(sessionId: String) {
+        wearHealthRepository.stopSession(sessionId)
+    }
+
+    /**
+     * Libera todos los recursos del repositorio de salud.
+     * Llama al cerrar la app (onDestroy de MainActivity).
+     */
+    fun dispose() {
         wearHealthRepository.dispose()
     }
 }

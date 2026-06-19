@@ -20,19 +20,19 @@ import javax.inject.Singleton
 /**
  * Repositorio central del reloj.
  *
- * Orquesta el flujo completo S1:
- * 1. Recibe START del movil → activa HealthServicesManager
- * 2. HealthServicesManager emite muestras de FC
- * 3. WearDataClient envia cada muestra al movil
- * 4. Recibe STOP del movil → detiene HealthServicesManager
+ * Responsabilidades S1:
+ * 1. Escuchar muestras de FC del HealthServicesManager y enviarlas al movil
+ * 2. Iniciar/detener el sensor cuando el ViewModel lo ordene
+ * 3. Notificar al movil cuando el usuario detiene la sesion
  *
+ * El reloj no escucha comandos del movil. Eso es responsabilidad del SessionViewModel.
  * El reloj no decide, no calcula, no persiste. Solo reacciona y transporta.
  */
 @Singleton
 class WearHealthRepository @Inject constructor(
-    private val wearMessageClient: WearMessageClient,
     private val healthServicesManager: HealthServicesManager,
-    private val wearDataClient: WearDataClient
+    private val wearDataClient: WearDataClient,
+    private val wearMessageClient: WearMessageClient
 ) {
     companion object {
         private const val TAG = "WearHealthRepository"
@@ -46,21 +46,12 @@ class WearHealthRepository @Inject constructor(
     private var isSessionActive = false
 
     /**
-     * Inicia la escucha de comandos del movil.
-     * Debe llamarse al arrancar la app (WearApplication o MainActivity).
+     * Inicializa el repositorio.
+     * Escucha muestras de FC del sensor para enviarlas al movil.
+     * NO escucha comandos del movil (eso lo hace SessionViewModel).
      */
     fun initialize() {
         Log.i(TAG, "Inicializando WearHealthRepository...")
-
-        // Escuchar comandos START/STOP del movil
-        wearMessageClient.commands
-            .onEach { command ->
-                when (command) {
-                    is WearMessageClient.WearCommand.Start -> onStartCommand(command.sessionId)
-                    is WearMessageClient.WearCommand.Stop -> onStopCommand(command.sessionId)
-                }
-            }
-            .launchIn(scope)
 
         // Escuchar muestras de FC y enviarlas al movil
         healthServicesManager.heartRateSamples
@@ -69,22 +60,22 @@ class WearHealthRepository @Inject constructor(
             }
             .launchIn(scope)
 
-        // Iniciar escucha de mensajes del movil
-        wearMessageClient.startListening()
-
-        Log.i(TAG, "WearHealthRepository inicializado. Esperando START del movil.")
+        Log.i(TAG, "WearHealthRepository inicializado. Esperando orden de inicio desde ViewModel.")
     }
 
     /**
-     * Procesa comando START del movil.
+     * Inicia la sesion de ejercicio en el reloj.
+     * Llama al sensor de FC y marca la sesion como activa.
+     *
+     * @param sessionId ID de la sesion (para validacion interna)
      */
-    private fun onStartCommand(sessionId: String) {
+    fun startSession(sessionId: String) {
         if (isSessionActive) {
-            Log.w(TAG, "Sesion ya activa, ignorando START")
+            Log.w(TAG, "Sesion ya activa, ignorando startSession()")
             return
         }
 
-        Log.i(TAG, "START recibido para sesion: $sessionId")
+        Log.i(TAG, "START ordenado por ViewModel para sesion: $sessionId")
         isSessionActive = true
 
         scope.launch {
@@ -97,10 +88,12 @@ class WearHealthRepository @Inject constructor(
             }
         }
     }
+
     /**
-     * Detiene la sesion activa en el reloj (cuando el usuario presiona DETENER).
-     * Difiere de onStopCommand() porque este es iniciado por el usuario en el reloj,
-     * no por un comando del movil.
+     * Detiene la sesion activa en el reloj.
+     * Detiene el sensor y notifica al movil que el reloj detuvo.
+     *
+     * @param sessionId ID de la sesion a detener
      */
     fun stopSession(sessionId: String) {
         if (!isSessionActive) {
@@ -108,32 +101,7 @@ class WearHealthRepository @Inject constructor(
             return
         }
 
-        Log.i(TAG, "Deteniendo sesion por accion del usuario: $sessionId")
-        isSessionActive = false
-
-        scope.launch {
-            try {
-                healthServicesManager.stopHeartRateMonitoring()
-                Log.i(TAG, "Monitoreo de FC detenido por usuario")
-
-                // Notificar al movil que el reloj detuvo
-                wearMessageClient.sendStoppedToMobile(sessionId)
-                Log.i(TAG, "STOPPED enviado al movil desde stopSession()")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deteniendo sesion por usuario", e)
-            }
-        }
-    }
-    /**
-     * Procesa comando STOP del movil.
-     */
-    private fun onStopCommand(sessionId: String) {
-        if (!isSessionActive) {
-            Log.w(TAG, "No hay sesion activa, ignorando STOP")
-            return
-        }
-
-        Log.i(TAG, "STOP recibido para sesion: $sessionId")
+        Log.i(TAG, "STOP ordenado por ViewModel para sesion: $sessionId")
         isSessionActive = false
 
         scope.launch {
@@ -143,18 +111,21 @@ class WearHealthRepository @Inject constructor(
 
                 // Notificar al movil que el reloj detuvo
                 wearMessageClient.sendStoppedToMobile(sessionId)
+                Log.i(TAG, "STOPPED enviado al movil desde stopSession()")
             } catch (e: Exception) {
-                Log.e(TAG, "Error deteniendo monitoreo de FC", e)
+                Log.e(TAG, "Error deteniendo sesion", e)
             }
         }
     }
 
     /**
      * Envia una muestra de FC al movil.
+     * Solo envia si hay una sesion activa.
      */
     private fun sendSampleToMobile(sample: HeartRateSample) {
         if (!isSessionActive) {
-            Log.w(TAG, "Muestra recibida sin sesion activa, descartando")
+            // Normal al inicio: el sensor puede emitir una muestra antes de que
+            // startSession() marque isSessionActive = true
             return
         }
 
@@ -173,7 +144,6 @@ class WearHealthRepository @Inject constructor(
             }
         }
 
-        wearMessageClient.stopListening()
         healthServicesManager.cleanup()
         wearDataClient.cleanup()
         scope.cancel()

@@ -13,10 +13,8 @@ import javax.inject.Inject
  * - Inicializar Hilt (inyeccion de dependencias)
  * - Registrar listener de MessageClient para recibir comandos del movil
  *
- * La inicializacion del repositorio de salud (WearHealthRepository) ocurre en
+ * La inicializacion del repositorio de salud ocurre en
  * SessionViewModel.initialize() llamado desde MainActivity.onCreate().
- *
- * @see Apendice S1 §3.3 (Reloj no persiste, no decide, solo reacciona)
  */
 @HiltAndroidApp
 class WearApplication : Application() {
@@ -32,7 +30,7 @@ class WearApplication : Application() {
         super.onCreate()
         Log.i(TAG, "WearApplication iniciada")
 
-        // REGISTRAR LISTENER: el reloj escucha comandos START/STOP del movil
+        // UNICO lugar donde se registra el listener de MessageClient
         wearMessageClient.startListening()
         Log.i(TAG, "WearMessageClient listener registrado")
     }

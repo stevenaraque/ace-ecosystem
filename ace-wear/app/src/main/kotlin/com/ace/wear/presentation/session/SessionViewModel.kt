@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ace.wear.data.health.HealthServicesManager
 import com.ace.wear.data.repository.WearHealthRepository
 import com.ace.wear.data.sync.WearMessageClient
+import com.ace.wear.domain.usecase.StartExerciseUseCase
 import com.ace.wear.domain.usecase.StopExerciseUseCase
 import com.ace.wear.presentation.WearSessionState
 import com.google.android.gms.wearable.NodeClient
@@ -22,14 +23,20 @@ import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 /**
- * ViewModel de la sesion de ejercicio en el reloj con diagnostico completo.
+ * ViewModel de la sesion de ejercicio en el reloj.
+ *
+ * Responsabilidades:
+ * 1. UNICO escuchador de comandos START/STOP del movil via WearMessageClient
+ * 2. Gestion de permisos BODY_SENSORS
+ * 3. UI: timer, FC en vivo, estado de conexion
+ * 4. Ordena al use case iniciar/detener sensor (NO al repository directo)
  */
 @HiltViewModel
 class SessionViewModel @Inject constructor(
     private val healthServicesManager: HealthServicesManager,
     private val wearMessageClient: WearMessageClient,
+    private val startExerciseUseCase: StartExerciseUseCase,
     private val stopExerciseUseCase: StopExerciseUseCase,
-    private val wearHealthRepository: WearHealthRepository,
     private val nodeClient: NodeClient
 ) : ViewModel() {
 
@@ -51,7 +58,7 @@ class SessionViewModel @Inject constructor(
     private var permissionLauncher: (() -> Unit)? = null
 
     init {
-        // Escuchar muestras de FC del HealthServicesManager
+        // Escuchar muestras de FC del HealthServicesManager para UI
         healthServicesManager.heartRateSamples
             .onEach { sample ->
                 _state.value = _state.value.copy(bpm = sample.bpm)
@@ -66,21 +73,31 @@ class SessionViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        // Escuchar comandos del movil (START/STOP)
+        // UNICO escuchador de comandos del movil
         wearMessageClient.commands
             .onEach { command ->
                 when (command) {
                     is WearMessageClient.WearCommand.Start -> {
-                        logDiag("COMANDO START recibido: sessionId=${command.sessionId}")
+                        logDiag("COMANDO START recibido del movil: sessionId=${command.sessionId}")
                         handleStartCommand(command.sessionId)
                     }
                     is WearMessageClient.WearCommand.Stop -> {
-                        logDiag("COMANDO STOP recibido: sessionId=${command.sessionId}")
-                        onSessionStopped(command.sessionId)
+                        logDiag("COMANDO STOP recibido del movil: sessionId=${command.sessionId}")
+                        handleStopFromMobile(command.sessionId)
                     }
                 }
             }
             .launchIn(viewModelScope)
+    }
+
+    /**
+     * Inicializa el ViewModel.
+     * Llama al use case que inicializa el repositorio de salud.
+     */
+    fun initialize() {
+        logDiag("=== INICIALIZANDO A.C.E WEAR ===")
+        startExerciseUseCase()
+        checkConnectionStatus()
     }
 
     /**
@@ -101,7 +118,6 @@ class SessionViewModel @Inject constructor(
 
         if (isGranted) {
             logDiag("Permiso BODY_SENSORS concedido")
-            // Si hay una sesion pendiente, iniciarla ahora
             pendingSessionId?.let { sessionId ->
                 logDiag("Iniciando sesion pendiente: $sessionId")
                 pendingSessionId = null
@@ -113,14 +129,13 @@ class SessionViewModel @Inject constructor(
     }
 
     /**
-     * Maneja el comando START: si no tiene permiso, lo pide primero.
+     * Maneja el comando START del movil.
+     * Si no tiene permiso, lo pide primero.
      */
     private fun handleStartCommand(sessionId: String) {
         if (_state.value.hasSensorPermission) {
-            // Ya tiene permiso, iniciar directamente
             startSessionInternal(sessionId)
         } else {
-            // No tiene permiso, guardar sessionId y pedir permiso
             logDiag("START recibido pero falta permiso BODY_SENSORS - solicitando...")
             pendingSessionId = sessionId
             permissionLauncher?.invoke()
@@ -128,6 +143,10 @@ class SessionViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Inicia la sesion real (monitoreo de FC + timer).
+     * Solo llamar despues de confirmar que tiene permiso.
+     */
     /**
      * Inicia la sesion real (monitoreo de FC + timer).
      * Solo llamar despues de confirmar que tiene permiso.
@@ -142,14 +161,8 @@ class SessionViewModel @Inject constructor(
         )
         logDiag("Sesion INICIADA: $sessionId")
 
-        // Iniciar monitoreo de FC
-        val success = healthServicesManager.startHeartRateMonitoring()
-        if (!success) {
-            logDiag("ERROR: HealthServicesManager no pudo iniciar")
-            _state.value = _state.value.copy(
-                lastError = "Fallo al iniciar sensor"
-            )
-        }
+        // Ordenar al use case que inicie el sensor
+        startExerciseUseCase.startSession(sessionId)  // ← NUEVO
 
         // Iniciar timer
         timerJob?.cancel()
@@ -163,10 +176,51 @@ class SessionViewModel @Inject constructor(
         }
     }
 
-    fun initialize() {
-        logDiag("=== INICIALIZANDO A.C.E WEAR ===")
-        wearHealthRepository.initialize()
-        checkConnectionStatus()
+    /**
+     * Maneja el comando STOP del movil.
+     * Ordena al use case detener la sesion (sensor + notificar).
+     */
+    private fun handleStopFromMobile(sessionId: String) {
+        logDiag("STOP recibido del movil para sesion: $sessionId")
+        stopExerciseUseCase(sessionId)  // ← USE CASE: detiene sensor + notifica
+        stopSessionInternal()
+    }
+
+    /**
+     * Usuario presiona DETENER en el reloj.
+     * Ordena al use case detener la sesion (sensor + notificar).
+     */
+    fun onStopButtonClicked() {
+        val sessionId = currentSessionId
+        if (sessionId == null) {
+            logDiag("ERROR: Boton DETENER presionado pero no hay sesion activa")
+            return
+        }
+
+        logDiag("Boton DETENER presionado por usuario")
+        logDiag("Deteniendo sesion: $sessionId")
+
+        // Detener UI INMEDIATAMENTE
+        stopSessionInternal()
+
+        // Ordenar al use case que detenga sensor y notifique al movil
+        stopExerciseUseCase(sessionId)  // ← USE CASE: detiene sensor + notifica
+    }
+
+    /**
+     * Detiene la UI de la sesion (timer, estado).
+     * Llamado tanto por STOP del movil como por DETENER del usuario.
+     */
+    private fun stopSessionInternal() {
+        currentSessionId = null
+        pendingSessionId = null
+        stopTimer()
+        _state.value = _state.value.copy(
+            isSessionActive = false,
+            bpm = null,
+            elapsedSeconds = 0L
+        )
+        logDiag("UI detenida localmente")
     }
 
     private fun checkConnectionStatus() {
@@ -203,58 +257,19 @@ class SessionViewModel @Inject constructor(
         }
     }
 
-    private fun onSessionStopped(sessionId: String) {
-        currentSessionId = null
-        pendingSessionId = null
-        stopTimer()
-        _state.value = _state.value.copy(
-            isSessionActive = false,
-            bpm = null
-        )
-        logDiag("Sesion DETENIDA por movil: $sessionId")
-    }
-
-    /**
-     * Usuario presiona DETENER en el reloj.
-     * Detiene UI, detiene monitoreo de FC, y notifica al movil.
-     */
-    fun onStopButtonClicked() {
-        val sessionId = currentSessionId
-        if (sessionId == null) {
-            logDiag("ERROR: Boton DETENER presionado pero no hay sesion activa")
-            return
-        }
-
-        logDiag("Boton DETENER presionado por usuario")
-        logDiag("Deteniendo sesion: $sessionId")
-
-        // Detener UI INMEDIATAMENTE
-        currentSessionId = null
-        pendingSessionId = null
-        stopTimer()
-        _state.value = _state.value.copy(
-            isSessionActive = false,
-            bpm = null,
-            elapsedSeconds = 0L
-        )
-        logDiag("UI detenida localmente")
-
-        // Detener monitoreo de FC y enviar STOPPED al movil
-        // WearHealthRepository.stopSession() hace ambas cosas:
-        // 1. healthServicesManager.stopHeartRateMonitoring()
-        // 2. wearMessageClient.sendStoppedToMobile(sessionId)
-        wearHealthRepository.stopSession(sessionId)
-    }
-
     override fun onCleared() {
         super.onCleared()
         stopTimer()
         logDiag("ViewModel destruido")
     }
 
+    /**
+     * Llamado por MainActivity.onDestroy().
+     * Libera todos los recursos del repositorio.
+     */
     fun dispose() {
         stopTimer()
-        stopExerciseUseCase()
+        stopExerciseUseCase.dispose()  // ← Limpia todo al cerrar app
         logDiag("Recursos liberados")
     }
 
