@@ -1,10 +1,10 @@
 # A.C.E — Implementation Plan: Backend (`ace-backend`)
 
-> **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.2  
-> **Versión:** 4.1 (Actualizado: JitPack para :shared, Spring Boot 4.0.6, Kotlin 2.2.21)  
-> **Fecha:** Junio 2026  
+> **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.3  
+> **Versión:** 4.2 (Actualizado: `:shared` v1.0.4, estado S4 Auth implementado, estructura de paquetes por definir)  
+> **Fecha:** 2026-06-18  
 > **Stack:** Spring Boot 4.0.6 · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · PostgreSQL 16 · Flyway 10.15 · kotlinx-serialization  
-> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.0+ (JitPack)  
+> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.4 (JitPack)  
 > **Responsables:** Reinaldo, Santiago (Backend)
 
 ---

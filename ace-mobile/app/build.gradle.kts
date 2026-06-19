@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.legacy.kapt)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.kotlin.serialization)
 }
@@ -87,7 +87,7 @@ dependencies {
     // ─── Room ───
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
+    kapt(libs.room.compiler)
 
     // ─── WorkManager ───
     implementation(libs.work.runtime.ktx)
@@ -100,9 +100,9 @@ dependencies {
 
     // ─── Hilt (DI) ───
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
+    kapt(libs.hilt.compiler)
     implementation(libs.hilt.work)
-    ksp(libs.hilt.work.compiler)
+    kapt(libs.hilt.work.compiler)
     implementation(libs.hilt.navigation.compose)
 
     // ─── DataStore ───

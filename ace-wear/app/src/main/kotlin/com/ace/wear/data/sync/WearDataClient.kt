@@ -3,7 +3,6 @@
 package com.ace.wear.data.sync
 
 import android.util.Log
-import com.ace.shared.constants.DataLayerPaths
 import com.ace.wear.data.health.model.HeartRateSample
 import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.PutDataMapRequest
@@ -16,6 +15,21 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Paths del Wearable Data Layer.
+ *
+ * El wear NO consume el modulo `:shared` (mantiene el APK ligero). Los paths se
+ * definen aqui como strings literales y deben coincidir con los de
+ * `com.ace.shared.constants.DataLayerPaths` que consume el mobile.
+ */
+object WearDataLayerPaths {
+    const val HEART_RATE = "/ace/health/heart_rate"
+    const val SESSION_STATUS = "/ace/session/%s/status"
+    const val START_COMMAND = "START"
+    const val STOP_COMMAND = "STOP"
+    const val STOPPED_COMMAND = "STOPPED"
+}
 
 /**
  * Cliente de datos del reloj.
@@ -38,7 +52,7 @@ open class WearDataClient @Inject constructor(
     open fun sendHeartRateSample(sample: HeartRateSample) {
         scope.launch {
             try {
-                val path = "${DataLayerPaths.HEART_RATE}/${sample.timestamp}"
+                val path = "${WearDataLayerPaths.HEART_RATE}/${sample.timestamp}"
                 val putDataMapRequest = PutDataMapRequest.create(path)
                 putDataMapRequest.dataMap.apply {
                     putDouble(KEY_BPM, sample.bpm)

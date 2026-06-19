@@ -1,7 +1,7 @@
 package sena.adso.ace_backend.security
 
 import com.ace.shared.constants.AuthConstants
-import sena.adso.ace_backend.service.auth.JwtService
+import sena.adso.ace_backend.auth.service.JwtService
 import jakarta.servlet.FilterChain
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse

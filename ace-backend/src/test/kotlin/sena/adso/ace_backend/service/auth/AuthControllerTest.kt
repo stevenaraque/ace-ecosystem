@@ -1,4 +1,4 @@
-package sena.adso.ace_backend.controller
+package sena.adso.ace_backend.auth.controller
 
 import com.ace.shared.dto.AuthRequestDto
 import com.ace.shared.dto.AuthResponseDto
@@ -13,8 +13,8 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.post
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
-import sena.adso.ace_backend.controller.AuthController 
-import sena.adso.ace_backend.service.auth.AuthService
+import sena.adso.ace_backend.auth.controller.AuthController
+import sena.adso.ace_backend.auth.service.AuthService
 
 class AuthControllerTest {
 

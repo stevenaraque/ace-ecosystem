@@ -1,40 +1,43 @@
 # ─── Stage 1: Build ───
-FROM eclipse-temurin:21-jdk-alpine AS builder
+# Usa el Gradle Wrapper del proyecto (Gradle 9.5.1) en lugar de descargar manualmente.
+# Esto garantiza que la versión de Gradle sea idéntica a la del entorno local.
+FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
 
-# Instalar Gradle manualmente
-RUN apk add --no-cache curl unzip \
-    && curl -L https://services.gradle.org/distributions/gradle-8.14-bin.zip -o gradle.zip \
-    && unzip -q gradle.zip \
-    && mv gradle-8.14 /opt/gradle \
-    && rm gradle.zip
-ENV PATH="/opt/gradle/bin:${PATH}"
+# Copiar wrapper + archivos de build PRIMERO (capa cacheable de dependencias)
+COPY gradlew ./
+COPY gradle ./gradle
+COPY build.gradle.kts settings.gradle.kts ./
+RUN chmod +x gradlew
 
-# Copiar archivos de build
-COPY build.gradle.kts .
-COPY settings.gradle.kts .
-COPY gradle/ gradle/
+# Precachear dependencias (falla sin src pero deja la caché de Gradle lista)
+RUN ./gradlew --no-daemon dependencies --quiet || true
 
-# Descargar dependencias (capa cacheable)
-RUN gradle dependencies --no-daemon
-
-# Copiar código fuente
-COPY src/ src/
-
-# Compilar y generar JAR
-RUN gradle bootJar --no-daemon
+# Copiar código fuente y compilar
+COPY src ./src
+RUN ./gradlew --no-daemon bootJar -x test
 
 # ─── Stage 2: Runtime ───
-FROM eclipse-temurin:21-jre-alpine
+# eclipse-temurin:21-jre-jammy (Debian) en lugar de Alpine:
+# - Resolución DNS más estable en entornos cloud (Supabase, JitPack)
+# - Compatibilidad total con herramientas JVM de diagnóstico
+FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
-# Copiar solo el JAR generado
+# Copiar solo el JAR generado (sin fuentes, sin Gradle, sin JDK)
 COPY --from=builder /app/build/libs/*.jar app.jar
 
-# Puerto expuesto
+# Render inyecta $PORT automáticamente; Spring lo lee vía ${PORT:8080}
 EXPOSE 8080
 
+# Perfil de producción (usa application-prod.yml)
+ENV SPRING_PROFILES_ACTIVE=prod
+
+# Tuning de JVM para contenedores con RAM limitada (Render free/starter)
+# MaxRAMPercentage=75% → si Render da 512MB, la JVM usa ~384MB
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+UseContainerSupport"
+
 # Ejecutar la aplicación
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

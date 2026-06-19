@@ -1,30 +1,22 @@
 # A.C.E — Implementation Plan: Wear OS (`ace-wear`)
 
 > **Estado:** ✅ En desarrollo activo (Steven)  
-> **Versión:** 4.2 (Corregido: estructura real del proyecto, :shared SÍ consumido, nombres de archivos actualizados)  
-> **Fecha:** 2026-06-12  
+> **Versión:** 4.3 (Corregido: wear **NO consume** `:shared`; paths como strings literales alineados con el estándar)  
+> **Fecha:** 2026-06-18  
 > **Stack:** Wear OS 3+ (API 30+) · Kotlin 2.0.21 (built-in AGP 9.0) · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Health Services Client 1.0.0 · Wear OS Data Layer API · Jetpack Compose for Wear OS 1.6.2 · Hilt 2.59.2  
-> **Depende de:** ✅ `com.github.reinaldojperalta:ace-shared` v1.0.3 (JitPack)  
-> **Responsable:** Steven Araque (Mobile/Wear Lead)  
+> **NO consume `:shared`** (decisión de diseño: mantener el APK del reloj ligero). Los paths del Data Layer se definen como strings literales locales, alineados con `com.ace.shared.constants.DataLayerPaths` que sí usa el mobile.  
+> **Responsable:** Steven Araque (Mobile/Wear Lead)
 
 ---
 
-## Historial de cambios (v4.1 → v4.2)
+## Historial de cambios
 
-| Aspecto | v4.1 (anterior) | v4.2 (actual) | Justificación |
-|---------|-----------------|---------------|---------------|
-| **`:shared` en wear** | "NO consume JAR" | ✅ **SÍ consume** `com.github.reinaldojperalta:ace-shared:1.0.3` | Ya configurado en `build.gradle.kts` y funciona. Da paths tipados y reduce riesgo de desync. |
-| **Paths Data Layer** | Hardcodeados como strings literales | ✅ **Importados desde `:shared`** (`DataLayerPaths.HEART_RATE`, etc.) | Coherencia con mobile/backend. Si cambia en `:shared`, wear se actualiza automáticamente. |
-| **Estructura `data/`** | `data/sensor/`, `data/datalayer/` | ✅ **`data/health/`, `data/sync/`, `data/repository/`** | Más semántico. `health` = sensor, `sync` = Data Layer, `repository` = orquestación. |
-| **DI Modules** | `WearModule.kt` único | ✅ **`HealthServicesModule.kt` + `WearDataLayerModule.kt`** | Separación de responsabilidades: health vs. sync son dominios distintos. |
-| **MeasureClient wrapper** | `HeartRateSensor.kt` | ✅ **`HealthServicesManager.kt`** | Nombre más descriptivo. "Manager" implica gestión del ciclo de vida del sensor. |
-| **DataClient wrapper** | `WearDataSource.kt` | ✅ **`WearDataClient.kt`** | Nombre alineado con `WearMessageClient.kt`. "Client" = wrapper de API de Google. |
-| **UseCases** | `StartHeartRateMonitoringUseCase.kt` / `StopHeartRateMonitoringUseCase.kt` | ✅ **`StartExerciseUseCase.kt`** / **`StopExerciseUseCase.kt`** | Más semántico. No solo monitorea FC; inicia/detiene toda la sesión de ejercicio. |
-| **HeartRateCallback** | `HeartRateCallback.kt` separado | ✅ **Callback interno en `HealthServicesManager.kt`** | Callback es implementación detallada del manager. No necesita archivo propio en MVP. |
-| **UI State** | No documentado | ✅ **`WearSessionState.kt`** | Sealed class para estado reactivo de la UI. Documentado. |
-| **Repository** | No documentado | ✅ **`WearHealthRepository.kt`** | Capa de abstracción entre data sources y use cases. Documentado. |
-| **UI Components** | No documentado | ✅ **`presentation/components/`** con 4 componentes | Reutilización de UI. Documentado. |
-| **Foreground Service** | `HeartRateForegroundService.kt` reservado | ✅ **Eliminado de MVP** | No necesario. `MeasureClient` funciona sin foreground service en Wear OS cuando la app está visible. |
+| Versión | Aspecto | Cambio | Justificación |
+|---------|---------|--------|---------------|
+| v4.1 → v4.2 | Estructura `data/`, DI modules, nombres de wrappers/usecases, UI state, repository, componentes, foreground service | Ver detalle en la versión anterior del doc | Más semántico, separación de responsabilidades (health vs. sync). |
+| **v4.2 → v4.3** | **`:shared` en wear** | ❌ **Revertido: wear NO consume `:shared`.** Se eliminó la dependencia JitPack (`ace-shared:1.0.3`) y el `import com.ace.shared.*`. Los paths se definen como strings literales locales (`WearDataLayerPaths` en `WearDataClient.kt`). | **El consumo de `:shared` en v4.2 fue un error.** Contradice la arquitectura oficial (Arquitectura v0.3 §1, §16: *"Wear OS: NO `:shared`, NO Room"*) y el principio de "el reloj es tonto por diseño". Los paths se mantienen alineados manualmente con `DataLayerPaths` de `:shared`. |
+
+> ⚠️ **Cambio de decisión v4.2 → v4.3:** La versión v4.2 introdujo el consumo de `:shared` en wear argumentando "paths tipados". Tras revisión, se **reverte** porque rompe el estándar A.C.E. El ahorro de riesgo de desync no justifica añadir la dependencia al reloj. **Responsabilidad de coherencia:** si cambia un path en `:shared`, wear debe actualizarse manualmente.
 
 ---
 
@@ -42,7 +34,7 @@ El módulo `:wear` es el **sensor y transmisor** del ecosistema. Su única misi�
 
 **Regla de oro:** Si algo puede hacerlo el móvil o el backend, **no lo hagas en el reloj** (S1 §9).
 
-**Nota sobre `:shared`:** El módulo `:wear` **SÍ consume** `:shared` v1.0.3 vía JitPack. Esto permite usar paths tipados (`DataLayerPaths.HEART_RATE`) y enums compartidos, reduciendo el riesgo de desync con mobile/backend. El footprint adicional es mínimo porque `:shared` es JVM puro y solo contiene DTOs/enums/constantes.
+**Nota sobre `:shared`:** El módulo `:wear` **NO consume** `:shared` (alineado con la Arquitectura v0.3 §16). Los paths del Data Layer se definen como **strings literales locales** en el objeto `WearDataLayerPaths` (`app/.../data/sync/WearDataClient.kt`), y deben mantenerse **manualmente alineados** con `com.ace.shared.constants.DataLayerPaths` que sí consume el mobile. Esto mantiene el APK del reloj ligero y respeta el principio "el reloj es tonto por diseño".
 
 ---
 
@@ -78,7 +70,7 @@ android {
 }
 
 dependencies {
-    implementation(libs.ace.shared)                          // ✅ :shared v1.0.3 vía JitPack
+    // ❌ NO hay dependencia a :shared (decisión v4.3). Paths como strings literales.
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
@@ -106,11 +98,11 @@ dependencies {
 }
 ```
 
-### Notas críticas sobre AGP 9.0 + Built-in Kotlin (v4.2)
+### Notas críticas sobre AGP 9.0 + Built-in Kotlin (v4.3)
 
 | Aspecto | Configuración actual | Justificación |
 |---------|----------------------|---------------|
-| **`:shared` JAR** | ✅ Sí, v1.0.3 | Paths tipados, enums compartidos, coherencia con mobile/backend. |
+| **`:shared` JAR** | ❌ **No consume** (v4.3) | Wear NO depende de `:shared`. Paths del Data Layer como strings literales locales (`WearDataLayerPaths`). El repo JitPack puede permanecer en `settings.gradle.kts` sin usar. |
 | **Plugin Kotlin Android** | Eliminado (built-in AGP 9.0) | No se declara explícitamente. |
 | **Plugin kapt** | `com.android.legacy-kapt` | `org.jetbrains.kotlin.kapt` incompatible con built-in Kotlin. |
 | `kotlinOptions { jvmTarget }` | Eliminado | `compileOptions` Java 21 es suficiente; AGP 9.0 infiere automáticamente. |
@@ -236,11 +228,11 @@ ace-wear/
 
 | Path | Dirección | Formato | Semántica | Origen en `:shared` |
 |------|-----------|---------|-----------|---------------------|
-| `/ace/health/heart_rate` | Wear → Mobile | `{"bpm": double, "timestamp": long}` | Muestra individual de FC. Epoch millis. | `DataLayerPaths.HEART_RATE` |
-| `/ace/session/{sessionId}/status` | Mobile → Wear | `"START"` / `"STOP"` | Comando de control de sesión. | `DataLayerPaths.SESSION_STATUS` |
-| `/ace/session/{sessionId}/status` | Wear → Mobile | `"STOPPED"` | Sesión detenida desde reloj. | `DataLayerPaths.SESSION_STATUS` |
+| `/ace/health/heart_rate` | Wear → Mobile | `{"bpm": double, "timestamp": long}` | Muestra individual de FC. Epoch millis. | `WearDataLayerPaths.HEART_RATE` (local) |
+| `/ace/session/{sessionId}/status` | Mobile → Wear | `"START"` / `"STOP"` | Comando de control de sesión. | `WearDataLayerPaths.SESSION_STATUS` (local) |
+| `/ace/session/{sessionId}/status` | Wear → Mobile | `"STOPPED"` | Sesión detenida desde reloj. | `WearDataLayerPaths.SESSION_STATUS` (local) |
 
-**Nota:** Paths importados desde `:shared` (`com.ace.shared.constants.DataLayerPaths`). Si cambian en `:shared`, wear se actualiza al subir versión en `libs.versions.toml`.
+**Nota:** Paths definidos como strings literales en el objeto `WearDataLayerPaths` dentro de `WearDataClient.kt`. **NO se importan de `:shared`.** Deben mantenerse **manualmente alineados** con `com.ace.shared.constants.DataLayerPaths` que sí consume el mobile. Si cambia un path en `:shared`, wear debe actualizarse manualmente.
 
 ---
 
@@ -274,7 +266,7 @@ sealed class WearSessionState {
 - [ ] **S1.8** `SessionViewModel.kt` — Expone `WearSessionState`, reacciona a comandos del móvil
 - [ ] **S1.9** `SessionScreen.kt` + componentes — UI: FC grande, timer, botón DETENER, chip de conexión
 - [ ] **S1.10** `WearApplication.kt` + DI modules — Hilt provee dependencias
-- [ ] **S1.11** Verificar que `:shared` v1.0.3 se resuelve correctamente en build
+- [ ] **S1.11** Verificar que **NO hay** dependencia a `:shared` en build (paths son strings literales locales)
 - [ ] **S1.12** Verificar que `MeasureClient` funciona en emulador Wear OS con Health Services
 
 ### Criterios de aceptación de HU-06
@@ -288,12 +280,12 @@ sealed class WearSessionState {
 
 ---
 
-## 8. Decisiones Técnicas y Trade-offs (v4.2)
+## 8. Decisiones Técnicas y Trade-offs (v4.3)
 
 | Decisión | Valor | Justificación | Trade-off | Apéndice |
 |----------|-------|---------------|-----------|----------|
-| **`:shared` en wear** | Sí, v1.0.3 | Paths tipados, enums compartidos, coherencia con mobile/backend. | Footprint mínimo (~40KB). Requiere actualizar versión si cambia. | — |
-| **Paths Data Layer** | Importados desde `:shared` | `DataLayerPaths.HEART_RATE`, etc. | Si `:shared` cambia path, wear debe actualizar versión. | S1 §2.2 |
+| **`:shared` en wear** | ❌ **NO consume** (v4.3) | Alineado con Arquitectura v0.3 §16: wear NO usa `:shared`. Reduce footprint y complejidad del APK del reloj. | Si cambia un path en `:shared`, wear debe actualizarse manualmente. | Arq. §16 |
+| **Paths Data Layer** | Strings literales locales (`WearDataLayerPaths`) | Definidos en `WearDataClient.kt`. Sin dependencia externa. | Riesgo de desync si alguien cambia el path en `:shared` y olvida wear. | S1 §2.2 |
 | **DI Modules separados** | `HealthServicesModule` + `WearDataLayerModule` | Separación de responsabilidades. Health y Sync son dominios distintos. | Más archivos, pero más limpio. | — |
 | **Callback interno** | Dentro de `HealthServicesManager` | No expone implementación detallada. Manager encapsula todo el ciclo de vida. | Menos granularidad, pero más cohesión. | S1 §3.3 |
 | **No Room en wear** | Sin SQLite/Room | Reduce APK y RAM. SO bufferiza vía DataClient si hay desconexión. | Límite no documentado de caché Google (~100-200 items, 24h). | S1 §3.4 |
