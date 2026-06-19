@@ -6,6 +6,9 @@
 **/gradlew
 **/gradlew.bat
 !gradle/wrapper/gradle-wrapper.properties
+# El backend necesita gradlew commiteado para el Dockerfile de Render
+!ace-backend/gradlew
+!ace-backend/gradlew.bat
 
 # IDEs
 **/.idea/

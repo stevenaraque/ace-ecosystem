@@ -1,4 +1,4 @@
-package sena.adso.ace_backend.service.auth
+package sena.adso.ace_backend.auth.service
 
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

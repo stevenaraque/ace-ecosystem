@@ -1,4 +1,4 @@
-package sena.adso.ace_backend.service.auth
+package sena.adso.ace_backend.auth.service
 
 import com.ace.shared.constants.AuthConstants
 import io.mockk.every
@@ -7,8 +7,8 @@ import io.mockk.verify
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import sena.adso.ace_backend.domain.auth.RefreshToken
-import sena.adso.ace_backend.repository.RefreshTokenRepository
+import sena.adso.ace_backend.auth.model.RefreshToken
+import sena.adso.ace_backend.auth.repository.RefreshTokenRepository
 import java.time.Instant
 import java.util.*
 import kotlin.test.assertEquals

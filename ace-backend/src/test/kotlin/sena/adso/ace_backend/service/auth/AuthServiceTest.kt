@@ -1,4 +1,4 @@
-package sena.adso.ace_backend.service.auth
+package sena.adso.ace_backend.auth.service
 
 import com.ace.shared.constants.AuthConstants
 import com.ace.shared.dto.AuthRequestDto
@@ -11,8 +11,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mindrot.jbcrypt.BCrypt
-import sena.adso.ace_backend.domain.user.User 
-import sena.adso.ace_backend.repository.UserRepository
+import sena.adso.ace_backend.auth.model.User
+import sena.adso.ace_backend.auth.repository.UserRepository
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
