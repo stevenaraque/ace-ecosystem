@@ -97,17 +97,21 @@ open class HealthServicesManager @Inject constructor(
     /**
      * Inicia la captura de frecuencia cardiaca.
      */
-    open fun startHeartRateMonitoring() {
+    open fun startHeartRateMonitoring(): Boolean {
         Log.i(TAG, "Iniciando monitoreo de FC...")
-        try {
+        return try {
             measureClient.registerMeasureCallback(
                 DataType.HEART_RATE_BPM,
                 heartRateCallback
             )
             Log.i(TAG, "Solicitud de registro enviada")
+            true
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Permiso BODY_SENSORS no concedido", e)
+            false
         } catch (e: Exception) {
             Log.e(TAG, "Error registrando callback", e)
-            throw e
+            false
         }
     }
 

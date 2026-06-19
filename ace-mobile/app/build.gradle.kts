@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "sena.adso.ace_mobile"
+        applicationId = "sena.adso.ace"
         minSdk = 33
         targetSdk = 36
         versionCode = 1

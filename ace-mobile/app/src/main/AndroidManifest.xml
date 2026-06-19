@@ -1,49 +1,94 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-<!-- PERMISOS EXISTENTES (sin tocar) -->
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- PERMISOS EXISTENTES (sin tocar) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
 
-<!-- PERMISOS NUEVOS (requeridos para Wear OS) -->
-<uses-permission android:name="com.google.android.gms.permission.WEARABLE" />
-<uses-permission android:name="android.permission.BODY_SENSORS" />
+    <!-- PERMISO: ya no es necesario para WearableListenerService, pero lo dejamos por si acaso -->
+    <uses-permission android:name="com.google.android.gms.permission.WEARABLE_BIND_LISTENER" />
 
-<application
-    android:name="com.ace.mobile.MobileApplication"
-    android:allowBackup="true"
-    android:dataExtractionRules="@xml/data_extraction_rules"
-    android:fullBackupContent="@xml/backup_rules"
-    android:icon="@mipmap/ic_launcher"
-    android:label="@string/app_name"
-    android:roundIcon="@mipmap/ic_launcher_round"
-    android:supportsRtl="true"
-    android:theme="@style/Theme.Acemobile"
-    android:usesCleartextTraffic="false">
-
-    <!-- ACTIVITY EXISTENTE (sin tocar) -->
-    <activity
-        android:name="com.ace.mobile.presentation.MainActivity"
-        android:exported="true"
+    <application
+        android:name="com.ace.mobile.MobileApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.Acemobile">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
-    </activity>
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Acemobile"
+        android:usesCleartextTraffic="false">
 
-    <!-- SERVICE NUEVO: Foreground Service para sesiones de ejercicio -->
-    <service
-        android:name="com.ace.mobile.service.ExerciseSyncService"
-        android:enabled="true"
-        android:exported="false"
-        android:foregroundServiceType="health" />
+        <!-- ACTIVITY PRINCIPAL: MainActivity como launcher -->
+        <activity
+            android:name="com.ace.mobile.presentation.MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Acemobile">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
-</application>
+        <!-- ACTIVITY ELIMINADA: WearDiagnosticActivity ya no es launcher -->
+        <!-- Se puede borrar o dejar sin launcher para acceso debug si la necesitas -->
+        <activity
+            android:name="com.ace.mobile.presentation.diagnostic.WearDiagnosticActivity"
+            android:exported="true"
+            android:label="A.C.E Wear Diagnostic">
+            <!-- Sin intent-filter de launcher -->
+        </activity>
+
+        <!-- SERVICE: Foreground Service para sesiones + receptor de mensajes del reloj -->
+        <service
+            android:name="com.ace.mobile.service.ExerciseSyncService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
+        <!--
+        SERVICE COMENTADO: WearableListenerService
+        Ya no se usa porque Android 14+ bloquea el bind desde Google Play Services.
+        La recepcion de mensajes ahora esta en ExerciseSyncService via MessageClient.addListener()
+        -->
+        <!--
+        <service
+            android:name="com.ace.mobile.service.WearDataListenerService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="com.google.android.gms.permission.WEARABLE_BIND_LISTENER">
+
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/ace/health/heart_rate"
+                    android:scheme="wear" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/ace/session/"
+                    android:scheme="wear" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.NODE_CHANGED" />
+                <data
+                    android:host="*"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+        -->
+
+    </application>
 
 </manifest>

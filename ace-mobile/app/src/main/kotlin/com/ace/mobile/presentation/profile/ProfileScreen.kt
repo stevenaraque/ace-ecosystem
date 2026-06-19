@@ -15,15 +15,7 @@ import androidx.navigation.NavController
 fun ProfileScreen(
     navController: NavController,
     viewModel: ProfileViewModel
-
 ) {
-    Button(
-        onClick = {
-            navController.navigate("session_screen_route")
-        }
-    ) {
-        Text("Start Exercise")
-    }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     // LaunchedEffect escucha los eventos de navegación únicos del ViewModel
@@ -54,6 +46,21 @@ fun ProfileScreen(
             Text(text = "Pantalla de Perfil de A.C.E", style = MaterialTheme.typography.headlineMedium)
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // ─── BOTÓN: Iniciar ejercicio ───
+            Button(
+                onClick = {
+                    navController.navigate("session_screen_route")
+                },
+                modifier = Modifier.fillMaxWidth(0.7f),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(text = "Start Exercise")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Botón de Logout reactivo al estado
             Button(

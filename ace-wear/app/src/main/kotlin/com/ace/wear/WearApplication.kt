@@ -1,18 +1,17 @@
-// ace-wear/app/src/main/kotlin/com/ace/wear/WearApplication.kt
-
 package com.ace.wear
 
 import android.app.Application
 import android.util.Log
-import com.ace.wear.presentation.session.SessionViewModel
+import com.ace.wear.data.sync.WearMessageClient
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 /**
  * Aplicacion principal del reloj Wear OS.
  *
  * Responsabilidades:
  * - Inicializar Hilt (inyeccion de dependencias)
- * - Crear NotificationChannels si fueran necesarios (S8, reservado para MVP)
+ * - Registrar listener de MessageClient para recibir comandos del movil
  *
  * La inicializacion del repositorio de salud (WearHealthRepository) ocurre en
  * SessionViewModel.initialize() llamado desde MainActivity.onCreate().
@@ -26,8 +25,15 @@ class WearApplication : Application() {
         private const val TAG = "WearApplication"
     }
 
+    @Inject
+    lateinit var wearMessageClient: WearMessageClient
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "WearApplication iniciada")
+
+        // REGISTRAR LISTENER: el reloj escucha comandos START/STOP del movil
+        wearMessageClient.startListening()
+        Log.i(TAG, "WearMessageClient listener registrado")
     }
 }

@@ -6,6 +6,7 @@ sealed class SessionUiState {
     data object Idle : SessionUiState()
     data object Loading : SessionUiState()
     data class Active(val session: ExerciseSession) : SessionUiState()
+    data class Stopping(val session: ExerciseSession) : SessionUiState()  // ← NUEVO
     data class Completed(val session: ExerciseSession) : SessionUiState()
     data class Error(val message: String) : SessionUiState()
 }
