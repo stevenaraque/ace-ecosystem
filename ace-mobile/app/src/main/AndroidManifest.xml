@@ -24,29 +24,25 @@
         android:theme="@style/Theme.Acemobile"
         android:usesCleartextTraffic="false">
 
-        <!-- ACTIVITY PRINCIPAL: TEMPORALMENTE sin launcher para testeo -->
+        <!-- ACTIVITY PRINCIPAL: MainActivity como launcher -->
         <activity
             android:name="com.ace.mobile.presentation.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Acemobile">
-            <!--
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            -->
         </activity>
 
-        <!-- ACTIVITY TEMPORAL: Diagnostico Wear OS - UNICA launcher -->
+        <!-- ACTIVITY ELIMINADA: WearDiagnosticActivity ya no es launcher -->
+        <!-- Se puede borrar o dejar sin launcher para acceso debug si la necesitas -->
         <activity
             android:name="com.ace.mobile.presentation.diagnostic.WearDiagnosticActivity"
             android:exported="true"
             android:label="A.C.E Wear Diagnostic">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- Sin intent-filter de launcher -->
         </activity>
 
         <!-- SERVICE: Foreground Service para sesiones + receptor de mensajes del reloj -->
