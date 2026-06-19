@@ -97,7 +97,33 @@ class WearHealthRepository @Inject constructor(
             }
         }
     }
+    /**
+     * Detiene la sesion activa en el reloj (cuando el usuario presiona DETENER).
+     * Difiere de onStopCommand() porque este es iniciado por el usuario en el reloj,
+     * no por un comando del movil.
+     */
+    fun stopSession(sessionId: String) {
+        if (!isSessionActive) {
+            Log.w(TAG, "No hay sesion activa para detener")
+            return
+        }
 
+        Log.i(TAG, "Deteniendo sesion por accion del usuario: $sessionId")
+        isSessionActive = false
+
+        scope.launch {
+            try {
+                healthServicesManager.stopHeartRateMonitoring()
+                Log.i(TAG, "Monitoreo de FC detenido por usuario")
+
+                // Notificar al movil que el reloj detuvo
+                wearMessageClient.sendStoppedToMobile(sessionId)
+                Log.i(TAG, "STOPPED enviado al movil desde stopSession()")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deteniendo sesion por usuario", e)
+            }
+        }
+    }
     /**
      * Procesa comando STOP del movil.
      */

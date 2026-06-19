@@ -23,7 +23,7 @@ android {
 
 
     defaultConfig {
-        applicationId = "sena.adso.ace_wear"
+        applicationId = "sena.adso.ace"
         minSdk = 30
         targetSdk = 36
         versionCode = 1

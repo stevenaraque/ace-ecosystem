@@ -30,8 +30,12 @@ fun SessionScreen(
     viewModel: SessionViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val currentSession by viewModel.currentSession.collectAsState()
-    val context = LocalContext.current
+
+    // ─── Datos en vivo del reloj ───
+    val heartRate by viewModel.heartRate.collectAsState()
+    val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
+    val blockCount by viewModel.blockCount.collectAsState()
+    val isConnected by viewModel.isConnected.collectAsState()
 
     Column(
         modifier = Modifier
@@ -55,7 +59,27 @@ fun SessionScreen(
                 val session = (uiState as SessionUiState.Active).session
                 SessionActiveContent(
                     session = session,
+                    heartRate = heartRate,
+                    elapsedSeconds = elapsedSeconds,
+                    blockCount = blockCount,
+                    isConnected = isConnected,
                     onStop = { viewModel.stopSession() }
+                )
+            }
+
+            is SessionUiState.Stopping -> {
+                // ← NUEVO: Estado mientras esperamos confirmacion del reloj
+                CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Stopping session...",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Waiting for watch confirmation",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
 
@@ -110,6 +134,10 @@ fun SessionIdleContent(
 @Composable
 fun SessionActiveContent(
     session: com.ace.mobile.domain.model.ExerciseSession,
+    heartRate: Double,
+    elapsedSeconds: Int,
+    blockCount: Int,
+    isConnected: Boolean,
     onStop: () -> Unit
 ) {
     Text(
@@ -118,14 +146,55 @@ fun SessionActiveContent(
         color = MaterialTheme.colorScheme.primary
     )
 
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(8.dp))
 
     Text("Sport: ${session.sportType.name}", style = MaterialTheme.typography.bodyLarge)
     Text("Session: ${session.sessionId.take(8)}...", style = MaterialTheme.typography.bodySmall)
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(24.dp))
 
-    Text("Waiting for heart rate data...", style = MaterialTheme.typography.bodyMedium)
+    // ─── Estado de conexion con el reloj ───
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val connectionColor = if (isConnected) Color.Green else Color.Red
+        val connectionText = if (isConnected) "Watch connected" else "Watch disconnected"
+        Text(
+            text = "●",
+            color = connectionColor,
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+        Text(
+            text = connectionText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = connectionColor
+        )
+    }
+
+    Spacer(modifier = Modifier.height(24.dp))
+
+    // ─── Datos en vivo del reloj ───
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        LiveDataCard(
+            label = "Heart Rate",
+            value = "${heartRate.toInt()}",
+            unit = "BPM"
+        )
+        LiveDataCard(
+            label = "Time",
+            value = "${elapsedSeconds / 60}:${String.format("%02d", elapsedSeconds % 60)}",
+            unit = ""
+        )
+        LiveDataCard(
+            label = "Blocks",
+            value = "$blockCount",
+            unit = ""
+        )
+    }
 
     Spacer(modifier = Modifier.height(32.dp))
 
@@ -134,6 +203,36 @@ fun SessionActiveContent(
         colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
     ) {
         Text("STOP SESSION")
+    }
+}
+
+@Composable
+fun LiveDataCard(
+    label: String,
+    value: String,
+    unit: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (unit.isNotEmpty()) {
+            Text(
+                text = unit,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
     }
 }
 
