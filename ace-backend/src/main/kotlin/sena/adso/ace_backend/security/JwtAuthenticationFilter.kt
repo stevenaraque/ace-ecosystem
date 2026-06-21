@@ -10,11 +10,14 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
+import java.util.logging.Logger
 
 @Component
 class JwtAuthenticationFilter(
     private val jwtService: JwtService
 ) : OncePerRequestFilter() {
+
+    private val logger = Logger.getLogger(JwtAuthenticationFilter::class.java.name)
 
     override fun doFilterInternal(
         request: HttpServletRequest,
@@ -33,10 +36,24 @@ class JwtAuthenticationFilter(
             return
         }
 
-        val token = authHeader.substring(AuthConstants.BEARER_PREFIX.length)
+        val token = authHeader.removePrefix(AuthConstants.BEARER_PREFIX).trim()
 
-        if (jwtService.isTokenExpired(token)) {
+        // ← FIX: Validar token PRIMERO, con logging de errores reales
+        val claims = jwtService.validateAccessToken(token)
+        
+        if (claims == null) {
+            logger.warning("Invalid token for ${request.requestURI}: signature mismatch or malformed")
             response.status = HttpServletResponse.SC_UNAUTHORIZED
+            response.contentType = "application/json"
+            response.writer.write("""{"error":"INVALID_TOKEN"}""")
+            return
+        }
+
+        // ← FIX: Verificar expiración con el claims ya validado
+        if (jwtService.isTokenExpired(token)) {
+            logger.warning("Token expired for ${request.requestURI}, exp=${claims.expiration}")
+            response.status = HttpServletResponse.SC_UNAUTHORIZED
+            response.contentType = "application/json"
             response.writer.write("""{"error":"TOKEN_EXPIRED"}""")
             return
         }
@@ -53,6 +70,7 @@ class JwtAuthenticationFilter(
                 details = WebAuthenticationDetailsSource().buildDetails(request)
             }
             SecurityContextHolder.getContext().authentication = authentication
+            logger.fine("Authenticated user $userId, device $deviceId for ${request.requestURI}")
         }
 
         filterChain.doFilter(request, response)

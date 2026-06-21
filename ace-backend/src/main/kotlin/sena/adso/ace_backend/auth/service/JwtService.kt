@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.*
+import java.util.logging.Logger
 import javax.crypto.SecretKey
 
 @Service
@@ -19,6 +20,8 @@ class JwtService(
     private val secretKey: SecretKey by lazy {
         Keys.hmacShaKeyFor(secret.toByteArray(Charsets.UTF_8))
     }
+
+    private val logger = Logger.getLogger(JwtService::class.java.name)
 
     fun generateAccessToken(userId: UUID, deviceId: String): String {
         val now = Instant.now()
@@ -42,6 +45,7 @@ class JwtService(
                 .parseSignedClaims(token)
                 .payload
         } catch (e: Exception) {
+            logger.warning("JWT validation failed: ${e.javaClass.simpleName}: ${e.message}")
             null
         }
     }

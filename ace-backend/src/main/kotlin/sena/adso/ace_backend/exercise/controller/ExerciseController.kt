@@ -29,11 +29,11 @@ class ExerciseController(
      */
     @PostMapping("/batch")
     fun syncBatch(
-        @AuthenticationPrincipal userDetails: UserDetails,
+        @AuthenticationPrincipal userDetails: String,
         @RequestBody request: SyncBatchRequestDto
     ): ResponseEntity<SyncBatchResponseDto> {
         
-        val userId = UUID.fromString(userDetails.username)
+        val userId = UUID.fromString(userDetails)
         logger.info { 
             "Sync batch requested by user: $userId, " +
             "device: ${request.deviceId}, " +
