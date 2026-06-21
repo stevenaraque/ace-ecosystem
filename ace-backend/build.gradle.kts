@@ -26,7 +26,7 @@ repositories {
 
 dependencies {
     // ─── :shared vía JitPack ───
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.4")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.5")
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

@@ -3,10 +3,17 @@ package com.ace.mobile
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.util.Log
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
-class MobileApplication : Application() {
+class MobileApplication : Application(), Configuration.Provider {
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
 
     companion object {
         const val CHANNEL_SESSION_ACTIVE = "ace_session_active"
@@ -17,7 +24,18 @@ class MobileApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
+        Log.i("MobileApplication", "A.C.E Mobile initialized")
     }
+
+    /**
+     * Configuración de WorkManager para Hilt.
+     * Permite que SyncBlockWorker reciba dependencias inyectadas.
+     */
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .setMinimumLoggingLevel(android.util.Log.INFO)
+            .build()
 
     private fun createNotificationChannels() {
         val channels = listOf(

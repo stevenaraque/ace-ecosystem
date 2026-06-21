@@ -1,11 +1,6 @@
 package com.ace.mobile.presentation.exercise
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ace.mobile.domain.model.ExerciseSession
@@ -16,14 +11,28 @@ import com.ace.mobile.service.ExerciseSyncService
 import com.ace.shared.enums.SportType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "SessionViewModel"
+private const val STOP_TIMEOUT_MS = 15_000L
+
+/**
+ * ViewModel de la pantalla de sesión de ejercicio.
+ *
+ * Arquitectura corregida (S3 funcional):
+ * - ExerciseSyncService: solo foreground + notificación persistente (no binder, no StateFlows).
+ * - Datos en vivo del reloj: se reciben via WearDataListenerService (S1) y se persisten en Room.
+ *   El ViewModel puede observar BlockRepository si necesita conteo de bloques.
+ * - STOP: envía comando al reloj, espera confirmación via callback del use case o timeout.
+ *
+ * NOTA: Este ViewModel NO hace bindService() porque ExerciseSyncService no expone IBinder.
+ */
 @HiltViewModel
 class SessionViewModel @Inject constructor(
     private val startSessionUseCase: StartSessionUseCase,
@@ -38,7 +47,7 @@ class SessionViewModel @Inject constructor(
     private val _currentSession = MutableStateFlow<ExerciseSession?>(null)
     val currentSession: StateFlow<ExerciseSession?> = _currentSession.asStateFlow()
 
-    // ─── Datos en vivo del servicio ───
+    // ─── Datos en vivo (mock/placeholder hasta S1 exponga flows reales) ───
     private val _heartRate = MutableStateFlow(0.0)
     val heartRate: StateFlow<Double> = _heartRate.asStateFlow()
 
@@ -51,28 +60,15 @@ class SessionViewModel @Inject constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    // ─── Service Binding ───
-    private var exerciseSyncService: ExerciseSyncService? = null
-    private var isBound = false
+    // ─── Control de timeout ───
+    private var stopTimeoutJob: Job? = null
 
-    private val serviceConnection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            val binder = service as ExerciseSyncService.LocalBinder
-            exerciseSyncService = binder.getService()
-            isBound = true
-            android.util.Log.d("SessionViewModel", "ExerciseSyncService conectado")
-
-            // Suscribirse a StateFlow del servicio
-            observeServiceStateFlows()
-        }
-
-        override fun onServiceDisconnected(name: ComponentName?) {
-            exerciseSyncService = null
-            isBound = false
-            android.util.Log.d("SessionViewModel", "ExerciseSyncService desconectado")
-        }
-    }
-
+    /**
+     * Inicia una nueva sesión de ejercicio.
+     * 1. Persiste sesión en Room (ACTIVE).
+     * 2. Envía START al reloj.
+     * 3. Levanta ExerciseSyncService como foreground (notificación persistente).
+     */
     fun startSession(sportType: SportType, userId: String) {
         viewModelScope.launch {
             _uiState.value = SessionUiState.Loading
@@ -81,135 +77,157 @@ class SessionViewModel @Inject constructor(
                 .onSuccess { session ->
                     _currentSession.value = session
                     _uiState.value = SessionUiState.Active(session)
+                    _elapsedSeconds.value = 0
+                    _blockCount.value = 0
 
-                    // 1. Iniciar servicio como foreground
-                    val serviceIntent = Intent(context, ExerciseSyncService::class.java).apply {
-                        action = ExerciseSyncService.ACTION_START_SESSION
-                        putExtra(ExerciseSyncService.EXTRA_SESSION_ID, session.sessionId)
-                        putExtra(ExerciseSyncService.EXTRA_SPORT_TYPE, sportType.name)
-                        putExtra(ExerciseSyncService.EXTRA_USER_ID, userId)
-                    }
-                    ContextCompat.startForegroundService(context, serviceIntent)
+                    // Iniciar foreground service (sin bind — el servicio no expone binder)
+                    ExerciseSyncService.startSession(context)
 
-                    // 2. Vincularse al servicio para leer datos en vivo
-                    val bindIntent = Intent(context, ExerciseSyncService::class.java)
-                    context.bindService(bindIntent, serviceConnection, Context.BIND_AUTO_CREATE)
+                    // TODO(S1): Suscribirse a datos en vivo del reloj via WearDataListenerService
+                    //  cuando esté implementado. Por ahora los valores se mantienen en 0.
+                    _isConnected.value = true
+
+                    // Iniciar contador de tiempo transcurrido
+                    startElapsedTimer()
                 }
                 .onFailure { error ->
-                    _uiState.value = SessionUiState.Error(error.message ?: "Failed to start session")
+                    android.util.Log.e(TAG, "Failed to start session", error)
+                    _uiState.value = SessionUiState.Error(
+                        error.message ?: "Failed to start session"
+                    )
                 }
         }
     }
 
     /**
      * Usuario presiona STOP en el mobile.
-     * Envia STOP al reloj y espera confirmacion (STOPPED).
-     * El servicio notificara via sessionStopped cuando llegue.
+     * Envía STOP al reloj y espera confirmación o timeout.
+     *
+     * NOTA: StopSessionUseCase YA envía sendStopCommandUseCase internamente.
+     *       No duplicamos la llamada.
      */
     fun stopSession() {
-        val session = _currentSession.value ?: return
+        val session = _currentSession.value ?: run {
+            android.util.Log.w(TAG, "stopSession() called but no active session")
+            return
+        }
+
+        // Cancelar timeout previo si existe
+        stopTimeoutJob?.cancel()
 
         viewModelScope.launch {
             _uiState.value = SessionUiState.Stopping(session)
 
-            // 1. Enviar STOP al reloj (el reloj respondera con STOPPED)
-            sendStopCommandUseCase(session.sessionId)
+            // 1. Llamar al use case que: envía STOP al reloj + completa la sesión en Room
+            stopSessionUseCase(session.sessionId)
+                .onSuccess { completedSession ->
+                    android.util.Log.i(TAG, "Session stopped successfully: ${completedSession.sessionId}")
+                    finalizeStopSession(completedSession, forced = false)
+                }
+                .onFailure { error ->
+                    android.util.Log.e(TAG, "StopSessionUseCase failed", error)
+                    // Si falla, intentamos timeout de gracia
+                    startStopTimeout(session.sessionId)
+                }
 
-            // 2. El servicio recibira STOPPED del reloj y emitira sessionStopped
-            //    → observeServiceStateFlows() ya escucha eso
-            //    → cuando llega, llama finalizeStopSession()
+            // 2. Timeout de seguridad: si en 15s no se completó, forzar
+            startStopTimeout(session.sessionId)
+        }
+    }
 
-            // 3. Timeout de seguridad: si en 15s no llega STOPPED, forzar stop
-            kotlinx.coroutines.delay(15000L)
+    /**
+     * Timeout de seguridad para el stop.
+     * Si el use case no responde en 15s, forzamos la finalización.
+     */
+    private fun startStopTimeout(sessionId: String) {
+        stopTimeoutJob?.cancel()
+        stopTimeoutJob = viewModelScope.launch {
+            delay(STOP_TIMEOUT_MS)
             if (_uiState.value is SessionUiState.Stopping) {
-                android.util.Log.w("SessionViewModel", "Timeout esperando STOPPED del reloj, forzando stop")
-                finalizeStopSession(session.sessionId, forced = true)
+                android.util.Log.w(TAG, "Timeout esperando STOP, forzando finalización")
+                // Forzar completación local sin esperar al reloj
+                forceCompleteSession(sessionId)
             }
         }
     }
 
-    private fun observeServiceStateFlows() {
-        val service = exerciseSyncService ?: return
-
-        // HeartRate
-        service.heartRate
-            .onEach { _heartRate.value = it }
-            .launchIn(viewModelScope)
-
-        // ElapsedSeconds
-        service.elapsedSeconds
-            .onEach { _elapsedSeconds.value = it }
-            .launchIn(viewModelScope)
-
-        // BlockCount
-        service.blockCount
-            .onEach { _blockCount.value = it }
-            .launchIn(viewModelScope)
-
-        // IsConnected
-        service.isConnected
-            .onEach { _isConnected.value = it }
-            .launchIn(viewModelScope)
-
-        // SessionStopped: cuando el reloj envia STOPPED
-        service.sessionStopped
-            .onEach { event ->
-                android.util.Log.i("SessionViewModel", "SessionStopped recibido: $event")
-                finalizeStopSession(event.sessionId, forced = false)
-            }
-            .launchIn(viewModelScope)
-    }
-
-    private fun finalizeStopSession(sessionId: String, forced: Boolean) {
+    /**
+     * Forzar completación de sesión cuando el reloj no responde.
+     */
+    private fun forceCompleteSession(sessionId: String) {
         viewModelScope.launch {
-            // Desvincular del servicio
-            if (isBound) {
-                context.unbindService(serviceConnection)
-                isBound = false
-            }
-
-            // Detener el servicio (ya proceso el bloque final)
-            val stopIntent = Intent(context, ExerciseSyncService::class.java)
-            context.stopService(stopIntent)
-
-            // Persistir en SQLite
             stopSessionUseCase(sessionId)
                 .onSuccess { completedSession ->
-                    _currentSession.value = null
-                    _heartRate.value = 0.0
-                    _elapsedSeconds.value = 0
-                    _blockCount.value = 0
-                    _isConnected.value = false
-                    _uiState.value = SessionUiState.Completed(completedSession)
+                    finalizeStopSession(completedSession, forced = true)
                 }
                 .onFailure { error ->
+                    android.util.Log.e(TAG, "Forced stop also failed", error)
                     _uiState.value = SessionUiState.Error(
-                        error.message ?: if (forced) "Forced stop failed" else "Failed to stop session"
+                        error.message ?: "Failed to stop session (forced)"
                     )
                 }
         }
     }
 
-    fun resetState() {
-        _uiState.value = SessionUiState.Idle
+    /**
+     * Limpia estado y detiene el foreground service.
+     */
+    private fun finalizeStopSession(session: ExerciseSession, forced: Boolean) {
+        // Cancelar timeout
+        stopTimeoutJob?.cancel()
+        stopTimeoutJob = null
+
+        // Detener foreground service
+        ExerciseSyncService.stopSession(context)
+
+        // Resetear flows
         _currentSession.value = null
         _heartRate.value = 0.0
         _elapsedSeconds.value = 0
         _blockCount.value = 0
         _isConnected.value = false
 
-        if (isBound) {
-            context.unbindService(serviceConnection)
-            isBound = false
+        _uiState.value = SessionUiState.Completed(session)
+
+        if (forced) {
+            android.util.Log.w(TAG, "Session finalized with forced=true")
         }
-        exerciseSyncService = null
+    }
+
+    /**
+     * Resetea el estado del ViewModel a Idle.
+     * Útil cuando el usuario cierra la pantalla de completado.
+     */
+    fun resetState() {
+        stopTimeoutJob?.cancel()
+        stopTimeoutJob = null
+
+        _uiState.value = SessionUiState.Idle
+        _currentSession.value = null
+        _heartRate.value = 0.0
+        _elapsedSeconds.value = 0
+        _blockCount.value = 0
+        _isConnected.value = false
+    }
+
+    /**
+     * Contador interno de segundos transcurridos.
+     * Se detiene automáticamente cuando la sesión ya no está activa.
+     */
+    private fun startElapsedTimer() {
+        viewModelScope.launch {
+            while (_uiState.value is SessionUiState.Active) {
+                delay(1_000L)
+                if (_uiState.value is SessionUiState.Active) {
+                    _elapsedSeconds.value += 1
+                }
+            }
+        }
     }
 
     override fun onCleared() {
         super.onCleared()
-        if (isBound) {
-            context.unbindService(serviceConnection)
-            isBound = false
-        }
+        stopTimeoutJob?.cancel()
+        android.util.Log.d(TAG, "ViewModel cleared")
     }
 }

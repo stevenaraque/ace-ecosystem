@@ -3,6 +3,7 @@ package com.ace.mobile.di
 import com.ace.mobile.data.local.database.dao.UserDao
 import com.ace.mobile.data.remote.api.AuthApi
 import com.ace.mobile.data.remote.interceptor.AuthInterceptor
+import com.ace.mobile.data.remote.api.ExerciseApi  // ← Agrega si falta
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import dagger.Module
@@ -102,5 +103,13 @@ object NetworkModule {
             .client(client)
             .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
+    }
+    // Dentro de tu @Module @InstallIn(SingletonComponent::class)
+// Agrega este provider:
+
+    @Provides
+    @Singleton
+    fun provideExerciseApi(retrofit: Retrofit): ExerciseApi {
+        return retrofit.create(ExerciseApi::class.java)
     }
 }
