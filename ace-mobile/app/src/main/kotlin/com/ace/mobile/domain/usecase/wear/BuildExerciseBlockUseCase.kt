@@ -21,7 +21,7 @@ class BuildExerciseBlockUseCase @Inject constructor(
     companion object {
         private const val TAG = "BuildExerciseBlock"
         private const val BLOCK_DURATION_SECONDS = 20        // 5 minutos
-        private const val BLOCK_DURATION_TOLERANCE_PERCENT = 50 // ±10%
+        private const val BLOCK_DURATION_TOLERANCE_PERCENT = 300 // ±10%
     }
 
     data class BlockResult(

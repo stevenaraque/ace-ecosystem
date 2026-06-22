@@ -90,7 +90,7 @@ class XpSanityValidator {
     companion object {
         const val MIN_BPM = 30.0
         const val MAX_BPM = 250.0
-        const val MIN_DURATION = 270
+        const val MIN_DURATION = 30
         const val MAX_DURATION = 330
         const val SAMPLE_TOLERANCE_PERCENT = 20
         const val MAX_XP_PER_BLOCK = 50
