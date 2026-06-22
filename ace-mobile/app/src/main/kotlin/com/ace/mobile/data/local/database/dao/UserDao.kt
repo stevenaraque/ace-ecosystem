@@ -1,4 +1,3 @@
-// app/src/main/kotlin/com/ace/mobile/data/local/database/dao/UserDao.kt
 package com.ace.mobile.data.local.database.dao
 
 import androidx.room.Dao
@@ -41,4 +40,12 @@ interface UserDao {
 
     @Query("UPDATE local_user SET totalXp = :xp WHERE userId = :userId")
     suspend fun updateTotalXp(userId: String, xp: Long)
+
+    // ← NUEVO
+    @Query("UPDATE local_user SET totalSessions = totalSessions + 1 WHERE userId = :userId")
+    suspend fun incrementTotalSessions(userId: String)
+
+    // ← NUEVO: Para invalidar ranking cache flag
+    @Query("UPDATE local_user SET totalXp = :xp WHERE userId = :userId")
+    suspend fun updateTotalXpAndInvalidate(userId: String, xp: Long)
 }

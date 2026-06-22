@@ -3,10 +3,7 @@ package com.ace.mobile.di
 import android.content.Context
 import androidx.room.Room
 import com.ace.mobile.data.local.database.AceDatabase
-import com.ace.mobile.data.local.database.dao.BlockDao
-import com.ace.mobile.data.local.database.dao.SessionDao
-import com.ace.mobile.data.local.database.dao.UserDao
-import com.ace.mobile.data.local.database.dao.XpFormulaDao
+import com.ace.mobile.data.local.database.dao.*
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -46,4 +43,11 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideXpFormulaDao(database: AceDatabase): XpFormulaDao = database.xpFormulaDao()
+
+    // REEMPLAZAR — agregar al final de DatabaseModule.kt
+    @Provides
+    @Singleton
+    fun provideRankingCacheDao(database: AceDatabase): RankingCacheDao = database.rankingCacheDao()
+
+
 }

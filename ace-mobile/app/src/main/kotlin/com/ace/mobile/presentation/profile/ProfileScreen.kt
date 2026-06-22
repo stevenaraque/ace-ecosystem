@@ -1,16 +1,20 @@
 package com.ace.mobile.presentation.profile
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     navController: NavController,
@@ -18,12 +22,10 @@ fun ProfileScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // LaunchedEffect escucha los eventos de navegación únicos del ViewModel
     LaunchedEffect(Unit) {
         viewModel.event.collect { event ->
             when (event) {
                 ProfileEvent.NavigateToLogin -> {
-                    // Navegación segura rompiendo el historial anterior
                     navController.navigate("login_screen_route") {
                         popUpTo(navController.graph.startDestinationId) {
                             inclusive = true
@@ -35,37 +37,50 @@ fun ProfileScreen(
         }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(text = "Pantalla de Perfil de A.C.E", style = MaterialTheme.typography.headlineMedium)
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ─── BOTÓN: Iniciar ejercicio ───
-            Button(
-                onClick = {
-                    navController.navigate("session_screen_route")
-                },
-                modifier = Modifier.fillMaxWidth(0.7f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Perfil", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
-            ) {
-                Text(text = "Start Exercise")
-            }
+            )
+        }
+    ) { padding ->
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.AccountCircle,
+                contentDescription = "Avatar",
+                modifier = Modifier.size(80.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
 
-            // Botón de Logout reactivo al estado
+            Text(
+                text = "Tu Perfil",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Configuración y cuenta",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
             Button(
                 onClick = { viewModel.logout() },
-                enabled = uiState !is ProfileUiState.Loading, // Se deshabilita si está cargando
+                enabled = uiState !is ProfileUiState.Loading,
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error
                 )
@@ -79,19 +94,25 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = "Cerrando sesión...")
                 } else {
-                    Text(text = "Cerrar Sesión")
+                    Text(text = "→ Cerrar Sesión")
                 }
             }
 
-            // Mostrar error en pantalla si ocurre algo en la base de datos
             if (uiState is ProfileUiState.Error) {
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = (uiState as ProfileUiState.Error).message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Text(
+                text = "A.C.E v1.0.5",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

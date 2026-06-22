@@ -1,4 +1,3 @@
-// app/src/main/kotlin/com/ace/mobile/data/local/database/entity/LocalUserEntity.kt
 package com.ace.mobile.data.local.database.entity
 
 import androidx.room.Entity
@@ -16,5 +15,6 @@ data class LocalUserEntity(
     val currentStreak: Int = 0,
     val bestStreak: Int = 0,
     val lastExerciseDate: Long? = null,
-    val totalXp: Long = 0L
+    val totalXp: Long = 0L,
+    val totalSessions: Int = 0  // ← NUEVO
 )

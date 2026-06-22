@@ -1,10 +1,8 @@
 package com.ace.mobile.di
 
 import com.ace.mobile.data.local.database.dao.UserDao
-import com.ace.mobile.data.remote.api.AuthApi
+import com.ace.mobile.data.remote.api.*
 import com.ace.mobile.data.remote.interceptor.AuthInterceptor
-import com.ace.mobile.data.remote.api.ExerciseApi  // ← Agrega si falta
-import com.ace.mobile.data.remote.api.XpFormulaApi  // ← Agrega si falta
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import dagger.Module
@@ -119,6 +117,12 @@ object NetworkModule {
     @Singleton
     fun provideXpFormulaApi(retrofit: Retrofit): XpFormulaApi {
         return retrofit.create(XpFormulaApi::class.java)
+    }
+    // REEMPLAZAR — agregar al final de NetworkModule.kt
+    @Provides
+    @Singleton
+    fun provideRankingApi(retrofit: Retrofit): com.ace.mobile.data.remote.api.RankingApi {
+        return retrofit.create(com.ace.mobile.data.remote.api.RankingApi::class.java)
     }
 
 }
