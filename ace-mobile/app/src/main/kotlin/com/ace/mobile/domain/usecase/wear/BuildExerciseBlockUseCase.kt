@@ -15,13 +15,14 @@ import javax.inject.Inject
 
 class BuildExerciseBlockUseCase @Inject constructor(
     private val xpFormulaDao: XpFormulaDao,
-    private val cacheXpFormulasUseCase: CacheXpFormulasUseCase  // FIX BUG 2: Inyectar para fallback
+    private val cacheXpFormulasUseCase: CacheXpFormulasUseCase
 ) {
 
     companion object {
         private const val TAG = "BuildExerciseBlock"
-        private const val BLOCK_DURATION_SECONDS = 20        // 5 minutos
-        private const val BLOCK_DURATION_TOLERANCE_PERCENT = 300 // ±10%
+        const val MIN_BLOCK_DURATION_SECONDS = 20      // Primer bloque mínimo
+        const val MAX_BLOCK_DURATION_SECONDS = 300     // Tope máximo
+        const val BLOCK_TIMER_MS = 60_000L             // Timer bloques post-primeros
     }
 
     data class BlockResult(
@@ -37,30 +38,54 @@ class BuildExerciseBlockUseCase @Inject constructor(
         val maxBpm: Double,
         val minBpm: Double,
         val sampleCount: Int,
-        val xpCalculated: Int
+        val xpCalculated: Double
     )
 
     suspend operator fun invoke(
         session: ExerciseSession,
-        samples: List<HeartRateSample>
+        samples: List<HeartRateSample>,
+        isFirstBlock: Boolean
     ): BlockResult? = withContext(Dispatchers.Default) {
 
+        Log.d(TAG, "=== BUILD BLOCK START ===")
+        Log.d(TAG, "isFirstBlock=$isFirstBlock, samples=${samples.size}")
+
         if (samples.isEmpty()) {
-            Log.w(TAG, "No samples provided for block build")
+            Log.w(TAG, "No samples provided, aborting")
             return@withContext null
         }
 
         val timestampStart = samples.first().timestamp
         val timestampEnd = samples.last().timestamp
-        val durationSeconds = ((timestampEnd - timestampStart) / 1000).toInt()
 
-        val minDuration = BLOCK_DURATION_SECONDS -
-                (BLOCK_DURATION_SECONDS * BLOCK_DURATION_TOLERANCE_PERCENT / 100)
-        val maxDuration = BLOCK_DURATION_SECONDS +
-                (BLOCK_DURATION_SECONDS * BLOCK_DURATION_TOLERANCE_PERCENT / 100)
+        // FIX: Calcular duración como (last - first) + intervalo_estimado
+        // Si las muestras vienen a ~1Hz, el intervalo es ~1000ms
+        // Usamos maxOf para no subestimar la duración
+        val rawDurationMs = timestampEnd - timestampStart
+        val estimatedIntervalMs = if (samples.size > 1) {
+            rawDurationMs / (samples.size - 1)
+        } else {
+            1000L // Asumimos 1Hz por defecto
+        }
+        val durationMs = rawDurationMs + estimatedIntervalMs
+        val durationSeconds = (durationMs / 1000).toInt()
 
-        if (durationSeconds < minDuration || durationSeconds > maxDuration) {
-            Log.w(TAG, "Duration $durationSeconds out of range [$minDuration, $maxDuration]")
+        Log.d(TAG, "durationSeconds=$durationSeconds (raw=${rawDurationMs}ms + interval=${estimatedIntervalMs}ms)")
+        Log.d(TAG, "first=${samples.first().bpm}, last=${samples.last().bpm}")
+
+        // REGLA: Primer bloque debe durar ≥ 20 segundos
+        if (isFirstBlock && durationSeconds < MIN_BLOCK_DURATION_SECONDS) {
+            Log.w(TAG, "PRIMER BLOQUE RECHAZADO: $durationSeconds < $MIN_BLOCK_DURATION_SECONDS")
+            Log.d(TAG, "=== BUILD BLOCK END (rejected) ===")
+            return@withContext null
+        }
+
+        Log.d(TAG, "Primer bloque validado: $durationSeconds >= $MIN_BLOCK_DURATION_SECONDS")
+
+        // Tope máximo
+        if (durationSeconds > MAX_BLOCK_DURATION_SECONDS) {
+            Log.w(TAG, "Bloque muy largo: $durationSeconds > $MAX_BLOCK_DURATION_SECONDS")
+            Log.d(TAG, "=== BUILD BLOCK END (rejected) ===")
             return@withContext null
         }
 
@@ -70,12 +95,15 @@ class BuildExerciseBlockUseCase @Inject constructor(
         val minBpm = bpmValues.minOrNull() ?: 0.0
         val sampleCount = samples.size
 
-        // FIX BUG 2: Calcular XP con fallback de cacheo si no hay fórmula
+        Log.d(TAG, "BPM stats: avg=$avgBpm, max=$maxBpm, min=$minBpm, samples=$sampleCount")
+
         val xpCalculated = calculateXpWithFallback(
             sportType = session.sportType,
             durationSeconds = durationSeconds,
             avgBpm = avgBpm
         )
+
+        Log.d(TAG, "XP FINAL: $xpCalculated")
 
         BlockResult(
             blockId = UUID.randomUUID().toString(),
@@ -91,41 +119,43 @@ class BuildExerciseBlockUseCase @Inject constructor(
             minBpm = minBpm,
             sampleCount = sampleCount,
             xpCalculated = xpCalculated
-        )
+        ).also {
+            Log.d(TAG, "=== BUILD BLOCK END (success) ===")
+        }
     }
 
-    /**
-     * FIX BUG 2: Intenta obtener fórmula de Room. Si no existe, intenta cachear del backend.
-     * Si todo falla, retorna 0 XP (fallback conservador).
-     */
     private suspend fun calculateXpWithFallback(
         sportType: SportType,
         durationSeconds: Int,
         avgBpm: Double
-    ): Int {
-        var formula = xpFormulaDao.getFormula(sportType.name)
+    ): Double {
+        Log.d(TAG, "Calculando XP: sport=$sportType, duration=${durationSeconds}s, avgBpm=$avgBpm")
 
-        // FIX BUG 2: Si no hay fórmula, intentar cachear del backend
+        var formula = xpFormulaDao.getFormula(sportType.name)
+        Log.d(TAG, "Formula from cache: ${formula?.sportType ?: "NULL"}")
+
         if (formula == null) {
-            Log.w(TAG, "No formula cached for $sportType, attempting to fetch from backend...")
+            Log.w(TAG, "No formula cached, fetching from backend...")
             try {
                 val cacheResult = cacheXpFormulasUseCase()
                 cacheResult.onSuccess { count ->
-                    Log.i(TAG, "XP formulas fetched on-demand: $count formulas")
-                    // Reintentar obtener la fórmula después de cachear
+                    Log.i(TAG, "Formulas fetched: $count")
                     formula = xpFormulaDao.getFormula(sportType.name)
+                    Log.d(TAG, "Formula after fetch: ${formula?.sportType ?: "NULL"}")
                 }.onFailure { error ->
-                    Log.w(TAG, "Failed to fetch XP formulas on-demand: ${error.message}")
+                    Log.w(TAG, "Fetch failed: ${error.message}")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Exception fetching XP formulas on-demand", e)
+                Log.e(TAG, "Exception fetching: ${e.message}")
             }
         }
 
         if (formula == null) {
-            Log.w(TAG, "No formula available for $sportType after fallback, XP=0")
-            return 0
+            Log.w(TAG, "No formula available, XP=0.0")
+            return 0.0
         }
+
+        Log.d(TAG, "Formula found: minBpm=${formula.minBpm}, xpPerMinute=${formula.xpPerMinute}, maxXp=${formula.maxXpPerBlock}")
 
         return calculateXpFromFormula(formula, durationSeconds, avgBpm)
     }
@@ -134,21 +164,24 @@ class BuildExerciseBlockUseCase @Inject constructor(
         formula: LocalXpFormulaEntity,
         durationSeconds: Int,
         avgBpm: Double
-    ): Int {
+    ): Double {
+        Log.d(TAG, "Calculando con formula: minBpm=${formula.minBpm}, xpPerMinute=${formula.xpPerMinute}, maxXp=${formula.maxXpPerBlock}")
+
         if (avgBpm < formula.minBpm) {
-            Log.d(TAG, "avgBpm $avgBpm < min ${formula.minBpm}, XP=0")
-            return 0
+            Log.d(TAG, "avgBpm $avgBpm < min ${formula.minBpm}, XP=0.0")
+            return 0.0
         }
 
         val minutes = durationSeconds / 60.0
-        val rawXp = (minutes * formula.xpPerMinute).toInt()
-        val cappedXp = minOf(rawXp, formula.maxXpPerBlock)
+        val rawXp = minutes * formula.xpPerMinute
+        val cappedXp = minOf(rawXp, formula.maxXpPerBlock.toDouble())
 
-        Log.d(TAG,
-            "XP calc: sport=${formula.sportType}, duration=${durationSeconds}s, " +
-                    "minutes=$minutes, rawXp=$rawXp, cappedXp=$cappedXp, " +
-                    "max=${formula.maxXpPerBlock}"
-        )
+        Log.d(TAG, "CALCULO DETALLADO:")
+        Log.d(TAG, "  durationSeconds=$durationSeconds")
+        Log.d(TAG, "  minutes=$durationSeconds/60.0 = $minutes")
+        Log.d(TAG, "  rawXp=$minutes * ${formula.xpPerMinute} = $rawXp")
+        Log.d(TAG, "  maxXpPerBlock=${formula.maxXpPerBlock}")
+        Log.d(TAG, "  cappedXp=min($rawXp, ${formula.maxXpPerBlock}) = $cappedXp")
 
         return cappedXp
     }

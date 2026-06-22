@@ -60,7 +60,7 @@ class CalculateBlockXpUseCase @Inject constructor(
             return 0
         }
 
-        val minutes = durationSeconds / 60.0
+        val minutes = durationSeconds / 10.0
         val rawXp = (minutes * formula.xpPerMinute).toInt()
         return minOf(rawXp, formula.maxXpPerBlock)
     }

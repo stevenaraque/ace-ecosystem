@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ace.shared.enums.SportType
+import java.util.Locale
 
 @Composable
 fun SessionScreen(
@@ -31,7 +32,6 @@ fun SessionScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // ─── Datos en vivo del reloj ───
     val heartRate by viewModel.heartRate.collectAsState()
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val blockCount by viewModel.blockCount.collectAsState()
@@ -144,11 +144,11 @@ fun SessionActiveContent(
     blockCount: Int,
     isConnected: Boolean,
     samplesReceived: Int,
-    totalXp: Long,
+    totalXp: Double,  // ← CAMBIO: Double
     onStop: () -> Unit
 ) {
     Text(
-        text = "🔥 Session Active!",
+        text = "Session Active!",
         style = MaterialTheme.typography.headlineMedium,
         color = MaterialTheme.colorScheme.primary
     )
@@ -160,7 +160,6 @@ fun SessionActiveContent(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // ─── Estado de conexion con el reloj ───
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -181,7 +180,6 @@ fun SessionActiveContent(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // ─── Datos en vivo del reloj ───
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -193,7 +191,7 @@ fun SessionActiveContent(
         )
         LiveDataCard(
             label = "Time",
-            value = "${elapsedSeconds / 60}:${String.format("%02d", elapsedSeconds % 60)}",
+            value = "${elapsedSeconds / 60}:${String.format(Locale.getDefault(), "%02d", elapsedSeconds % 60)}",
             unit = ""
         )
         LiveDataCard(
@@ -205,7 +203,6 @@ fun SessionActiveContent(
 
     Spacer(modifier = Modifier.height(8.dp))
 
-    // ─── Segunda fila: bloques y XP ───
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -217,7 +214,7 @@ fun SessionActiveContent(
         )
         LiveDataCard(
             label = "XP",
-            value = "$totalXp",
+            value = String.format(Locale.getDefault(), "%.2f", totalXp),  // ← 2 decimales
             unit = ""
         )
     }
@@ -265,12 +262,12 @@ fun LiveDataCard(
 @Composable
 fun SessionCompletedContent(
     session: com.ace.mobile.domain.model.ExerciseSession,
-    xpGained: Long,
+    xpGained: Double,
     blocksInSession: Int,
     onReset: () -> Unit
 ) {
     Text(
-        text = "✅ Session Completed!",
+        text = "Session Completed!",
         style = MaterialTheme.typography.headlineMedium,
         color = Color.Green
     )
@@ -285,7 +282,6 @@ fun SessionCompletedContent(
 
     Spacer(modifier = Modifier.height(16.dp))
 
-    // ─── Resumen de resultados ───
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
@@ -297,7 +293,7 @@ fun SessionCompletedContent(
         )
         LiveDataCard(
             label = "XP Gained",
-            value = "$xpGained",
+            value = String.format(Locale.getDefault(), "%.2f", xpGained),
             unit = "XP"
         )
     }
@@ -315,7 +311,7 @@ fun SessionErrorContent(
     onRetry: () -> Unit
 ) {
     Text(
-        text = "❌ Error",
+        text = "Error",
         style = MaterialTheme.typography.headlineMedium,
         color = MaterialTheme.colorScheme.error
     )

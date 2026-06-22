@@ -3,14 +3,10 @@ package com.ace.mobile.domain.usecase.exercise
 
 import android.util.Log
 import com.ace.mobile.data.local.database.dao.SessionDao
-import com.ace.mobile.data.local.database.entity.LocalBlockEntity
 import com.ace.mobile.data.repository.BlockRepository
 import com.ace.mobile.data.repository.SessionSampleBuffer
 import com.ace.mobile.domain.model.ExerciseSession
-import com.ace.mobile.domain.model.HeartRateSample
-import com.ace.mobile.domain.usecase.wear.BuildExerciseBlockUseCase
 import com.ace.mobile.domain.usecase.wear.SendStopCommandUseCase
-import com.ace.shared.enums.BlockStatus
 import com.ace.shared.enums.SessionStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,86 +17,57 @@ private const val TAG = "StopSessionUseCase"
 class StopSessionUseCase @Inject constructor(
     private val sessionDao: SessionDao,
     private val sendStopCommandUseCase: SendStopCommandUseCase,
-    private val buildExerciseBlockUseCase: BuildExerciseBlockUseCase,
-    private val blockRepository: BlockRepository,
-    private val sessionSampleBuffer: SessionSampleBuffer
+    private val sessionSampleBuffer: SessionSampleBuffer,
+    private val blockRepository: BlockRepository
 ) {
 
     suspend operator fun invoke(sessionId: String): Result<ExerciseSession> = withContext(Dispatchers.IO) {
         try {
+            Log.d(TAG, "=== STOP SESSION START: $sessionId ===")
+
             val sessionEntity = sessionDao.getSessionById(sessionId)
                 ?: return@withContext Result.failure(Exception("Session not found"))
 
             // 1. Enviar STOP al reloj
+            Log.d(TAG, "Sending STOP to watch...")
             sendStopCommandUseCase(sessionId)
 
-            // 2. Recuperar samples acumulados del buffer RAM
-            val samples: List<HeartRateSample> = sessionSampleBuffer.getSamples(sessionId)
+            // 2. Forzar cierre del bloque final
+            // El buffer cancela su timer interno y cierra el bloque de forma segura
+            Log.d(TAG, "Forcing final block close...")
+            val finalBlockSummary = sessionSampleBuffer.forceCloseBlock(sessionId)
 
-            // 3. Construir bloque con XP si hay samples
-            val sessionForBuild = ExerciseSession(
-                sessionId = sessionEntity.sessionId,
-                userId = sessionEntity.userId,
-                deviceId = sessionEntity.deviceId,
-                status = SessionStatus.ACTIVE,
-                sportType = com.ace.shared.enums.SportType.valueOf(sessionEntity.sportType),
-                timestampStart = sessionEntity.timestampStart,
-                timestampEnd = null,
-                totalBlocks = sessionEntity.totalBlocks,
-                totalXp = sessionEntity.totalXp
-            )
-
-            var blockXp = 0L
-            var blockInserted = false
-
-            if (samples.isNotEmpty()) {
-                val blockResult = buildExerciseBlockUseCase(sessionForBuild, samples)
-
-                if (blockResult != null) {
-                    val blockEntity = LocalBlockEntity(
-                        blockId = blockResult.blockId,
-                        sessionId = blockResult.sessionId,
-                        userId = blockResult.userId,
-                        timestampStart = blockResult.timestampStart,
-                        timestampEnd = blockResult.timestampEnd,
-                        durationSeconds = blockResult.durationSeconds,
-                        avgBpm = blockResult.avgBpm,
-                        maxBpm = blockResult.maxBpm,
-                        minBpm = blockResult.minBpm,
-                        sampleCount = blockResult.sampleCount,
-                        sportType = blockResult.sportType,
-                        xpCalculated = blockResult.xpCalculated,
-                        status = BlockStatus.PENDING
-                    )
-
-                    blockRepository.insertClosedBlock(blockEntity)
-                    blockXp = blockResult.xpCalculated.toLong()
-                    blockInserted = true
-                    Log.i(TAG, "Block ${blockResult.blockId} inserted with XP=$blockXp")
-                } else {
-                    Log.w(TAG, "BuildExerciseBlockUseCase returned null (invalid duration/samples)")
-                }
+            if (finalBlockSummary != null) {
+                Log.i(TAG, "Final block: #${finalBlockSummary.blockCount}, XP=${finalBlockSummary.xpGained}")
             } else {
-                Log.w(TAG, "No samples in buffer for session $sessionId")
+                Log.w(TAG, "No final block (no samples or rejected)")
             }
 
-            // 4. Limpiar buffer de esta sesión
+            // 3. Limpiar buffer
+            Log.d(TAG, "Clearing buffer...")
             sessionSampleBuffer.clear(sessionId)
 
-            // 5. Finalizar sesión en Room con totales reales
+            // 4. Leer totales de BD
+            val blocks = blockRepository.getBlocksBySession(sessionId)
+            val totalBlocks = blocks.size
+            val totalXp = blocks.sumOf { (it.xpCalculated ?: 0).toDouble() }
+
+            Log.d(TAG, "Totals from DB: blocks=$totalBlocks, xp=$totalXp")
+
+            // 5. Finalizar sesión
             val timestampEnd = System.currentTimeMillis()
-            val newTotalBlocks = sessionEntity.totalBlocks + (if (blockInserted) 1 else 0)
-            val newTotalXp = sessionEntity.totalXp + blockXp
 
             sessionDao.finalizeSession(
                 sessionId = sessionId,
                 status = SessionStatus.COMPLETED.name,
                 timestampEnd = timestampEnd,
-                totalBlocks = newTotalBlocks,
-                totalXp = newTotalXp
+                totalBlocks = totalBlocks,
+                totalXp = totalXp.toLong()
             )
 
-            // 6. Retornar sesión completada
+            Log.i(TAG, "Session finalized: $totalBlocks blocks, $totalXp XP")
+
+            // 6. Retornar
             Result.success(
                 ExerciseSession(
                     sessionId = sessionEntity.sessionId,
@@ -110,10 +77,12 @@ class StopSessionUseCase @Inject constructor(
                     sportType = com.ace.shared.enums.SportType.valueOf(sessionEntity.sportType),
                     timestampStart = sessionEntity.timestampStart,
                     timestampEnd = timestampEnd,
-                    totalBlocks = newTotalBlocks,
-                    totalXp = newTotalXp
+                    totalBlocks = totalBlocks,
+                    totalXp = totalXp.toLong()
                 )
-            )
+            ).also {
+                Log.d(TAG, "=== STOP SESSION END ===")
+            }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping session", e)
