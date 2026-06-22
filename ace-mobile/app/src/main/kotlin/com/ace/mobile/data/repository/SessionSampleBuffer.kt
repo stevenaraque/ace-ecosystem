@@ -3,8 +3,11 @@ package com.ace.mobile.data.repository
 
 import com.ace.mobile.domain.model.HeartRateSample
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+
+data class BlockSummary(
+    val blockCount: Int,
+    val xpGained: Double
+)
 
 interface SessionSampleBuffer {
     fun setActiveSessionId(sessionId: String?)
@@ -13,4 +16,7 @@ interface SessionSampleBuffer {
     fun getSamples(sessionId: String): List<HeartRateSample>
     fun clear(sessionId: String)
     fun observeSamples(): Flow<HeartRateSample>
+    fun observeBlocks(): Flow<BlockSummary>
+    fun getBlockCount(sessionId: String): Int
+    suspend fun forceCloseBlock(sessionId: String): BlockSummary?
 }

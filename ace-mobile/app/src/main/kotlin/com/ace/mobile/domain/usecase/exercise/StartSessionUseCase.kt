@@ -29,8 +29,7 @@ class StartSessionUseCase @Inject constructor(
         userId: String
     ): Result<ExerciseSession> = withContext(Dispatchers.IO) {
         try {
-            // FIX BUG 2: Cachear fórmulas de XP antes de iniciar sesión
-            // Si falla, logueamos pero no bloqueamos el inicio de sesión
+            // Cachear fórmulas de XP antes de iniciar sesión
             try {
                 Log.d(TAG, "Caching XP formulas before session start...")
                 val cacheResult = cacheXpFormulasUseCase()
@@ -66,6 +65,7 @@ class StartSessionUseCase @Inject constructor(
             )
             sessionDao.insertSession(sessionEntity)
 
+            // FIX: Pasar datos completos de la sesión al buffer para que el timer de bloques funcione
             sessionSampleBuffer.setActiveSessionId(sessionId)
             Log.i(TAG, "Session $sessionId started, buffer activated")
 

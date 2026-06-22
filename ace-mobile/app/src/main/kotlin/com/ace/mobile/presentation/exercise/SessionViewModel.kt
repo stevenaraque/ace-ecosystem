@@ -56,8 +56,8 @@ class SessionViewModel @Inject constructor(
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val _totalXp = MutableStateFlow(0L)
-    val totalXp: StateFlow<Long> = _totalXp.asStateFlow()
+    private val _totalXp = MutableStateFlow(0.0)
+    val totalXp: StateFlow<Double> = _totalXp.asStateFlow()
 
     private val _samplesReceived = MutableStateFlow(0)
     val samplesReceived: StateFlow<Int> = _samplesReceived.asStateFlow()
@@ -66,12 +66,19 @@ class SessionViewModel @Inject constructor(
     private var timerJob: Job? = null
 
     init {
-        // Observar samples del reloj en tiempo real
         sessionSampleBuffer.observeSamples()
             .onEach { sample ->
                 _heartRate.value = sample.bpm
-                _samplesReceived.value = _samplesReceived.value + 1
-                Log.d(TAG, "Sample received: ${sample.bpm.toInt()} BPM")
+                _samplesReceived.value += 1
+                Log.d(TAG, "Sample: ${sample.bpm.toInt()} BPM")
+            }
+            .launchIn(viewModelScope)
+
+        sessionSampleBuffer.observeBlocks()
+            .onEach { blockSummary ->
+                _blockCount.value = blockSummary.blockCount
+                _totalXp.value += blockSummary.xpGained
+                Log.i(TAG, "UI: Block #${blockSummary.blockCount}, +${blockSummary.xpGained} XP, total=${_totalXp.value}")
             }
             .launchIn(viewModelScope)
     }
@@ -86,7 +93,7 @@ class SessionViewModel @Inject constructor(
                     _uiState.value = SessionUiState.Active(session)
                     _elapsedSeconds.value = 0
                     _blockCount.value = 0
-                    _totalXp.value = 0
+                    _totalXp.value = 0.0
                     _samplesReceived.value = 0
                     _heartRate.value = 0.0
 
@@ -170,7 +177,7 @@ class SessionViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val blocks = blockRepository.getBlocksBySession(session.sessionId)
-                val xpGained = blocks.sumOf { (it.xpCalculated ?: 0).toLong() }
+                val xpGained = blocks.sumOf { (it.xpCalculated ?: 0).toDouble() }
                 val blockCount = blocks.size
 
                 _uiState.value = SessionUiState.Completed(
@@ -200,7 +207,7 @@ class SessionViewModel @Inject constructor(
         _heartRate.value = 0.0
         _elapsedSeconds.value = 0
         _blockCount.value = 0
-        _totalXp.value = 0
+        _totalXp.value = 0.0
         _samplesReceived.value = 0
         _isConnected.value = false
     }

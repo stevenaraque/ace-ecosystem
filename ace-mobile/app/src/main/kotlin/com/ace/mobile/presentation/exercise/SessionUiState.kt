@@ -10,7 +10,7 @@ sealed class SessionUiState {
     data class Stopping(val session: ExerciseSession) : SessionUiState()
     data class Completed(
         val session: ExerciseSession,
-        val xpGained: Long = 0L,
+        val xpGained: Double = 0.0,  // ← CAMBIO: Double
         val blocksInSession: Int = 0
     ) : SessionUiState()
     data class Error(val message: String) : SessionUiState()
