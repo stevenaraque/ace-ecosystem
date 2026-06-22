@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/presentation/exercise/SessionScreen.kt
 package com.ace.mobile.presentation.exercise
 
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ace.shared.enums.SportType
@@ -36,6 +36,8 @@ fun SessionScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val blockCount by viewModel.blockCount.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
+    val samplesReceived by viewModel.samplesReceived.collectAsState()
+    val totalXp by viewModel.totalXp.collectAsState()
 
     Column(
         modifier = Modifier
@@ -63,12 +65,13 @@ fun SessionScreen(
                     elapsedSeconds = elapsedSeconds,
                     blockCount = blockCount,
                     isConnected = isConnected,
+                    samplesReceived = samplesReceived,
+                    totalXp = totalXp,
                     onStop = { viewModel.stopSession() }
                 )
             }
 
             is SessionUiState.Stopping -> {
-                // ← NUEVO: Estado mientras esperamos confirmacion del reloj
                 CircularProgressIndicator()
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
@@ -84,9 +87,11 @@ fun SessionScreen(
             }
 
             is SessionUiState.Completed -> {
-                val session = (uiState as SessionUiState.Completed).session
+                val completed = uiState as SessionUiState.Completed
                 SessionCompletedContent(
-                    session = session,
+                    session = completed.session,
+                    xpGained = completed.xpGained,
+                    blocksInSession = completed.blocksInSession,
                     onReset = { viewModel.resetState() }
                 )
             }
@@ -138,6 +143,8 @@ fun SessionActiveContent(
     elapsedSeconds: Int,
     blockCount: Int,
     isConnected: Boolean,
+    samplesReceived: Int,
+    totalXp: Long,
     onStop: () -> Unit
 ) {
     Text(
@@ -151,7 +158,7 @@ fun SessionActiveContent(
     Text("Sport: ${session.sportType.name}", style = MaterialTheme.typography.bodyLarge)
     Text("Session: ${session.sessionId.take(8)}...", style = MaterialTheme.typography.bodySmall)
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(16.dp))
 
     // ─── Estado de conexion con el reloj ───
     Row(
@@ -172,7 +179,7 @@ fun SessionActiveContent(
         )
     }
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(16.dp))
 
     // ─── Datos en vivo del reloj ───
     Row(
@@ -181,7 +188,7 @@ fun SessionActiveContent(
     ) {
         LiveDataCard(
             label = "Heart Rate",
-            value = "${heartRate.toInt()}",
+            value = if (heartRate > 0) "${heartRate.toInt()}" else "--",
             unit = "BPM"
         )
         LiveDataCard(
@@ -190,13 +197,32 @@ fun SessionActiveContent(
             unit = ""
         )
         LiveDataCard(
+            label = "Samples",
+            value = "$samplesReceived",
+            unit = "rcv"
+        )
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    // ─── Segunda fila: bloques y XP ───
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        LiveDataCard(
             label = "Blocks",
             value = "$blockCount",
             unit = ""
         )
+        LiveDataCard(
+            label = "XP",
+            value = "$totalXp",
+            unit = ""
+        )
     }
 
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(24.dp))
 
     Button(
         onClick = onStop,
@@ -239,6 +265,8 @@ fun LiveDataCard(
 @Composable
 fun SessionCompletedContent(
     session: com.ace.mobile.domain.model.ExerciseSession,
+    xpGained: Long,
+    blocksInSession: Int,
     onReset: () -> Unit
 ) {
     Text(
@@ -250,8 +278,29 @@ fun SessionCompletedContent(
     Spacer(modifier = Modifier.height(16.dp))
 
     Text("Sport: ${session.sportType.name}")
-    Text("Blocks: ${session.totalBlocks}")
-    Text("XP: ${session.totalXp}")
+    Text("Duration: ${session.timestampEnd?.let { end ->
+        val duration = (end - session.timestampStart) / 1000
+        "${duration / 60}m ${duration % 60}s"
+    } ?: "Unknown"}")
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    // ─── Resumen de resultados ───
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        LiveDataCard(
+            label = "Blocks",
+            value = "$blocksInSession",
+            unit = ""
+        )
+        LiveDataCard(
+            label = "XP Gained",
+            value = "$xpGained",
+            unit = "XP"
+        )
+    }
 
     Spacer(modifier = Modifier.height(32.dp))
 

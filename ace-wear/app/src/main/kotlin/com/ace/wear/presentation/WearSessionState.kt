@@ -1,3 +1,4 @@
+// ace-wear/app/src/main/kotlin/com/ace/wear/presentation/WearSessionState.kt
 package com.ace.wear.presentation
 
 /**
@@ -29,5 +30,11 @@ data class WearSessionState(
     val hasSensorPermission: Boolean = false,
 
     /** True si el usuario nego el permiso BODY_SENSORS. */
-    val permissionDenied: Boolean = false
+    val permissionDenied: Boolean = false,
+
+    /** True si estamos en modo simulacion de FC (para testing sin sensor). */
+    val isSimulationMode: Boolean = false,
+
+    /** Contador de muestras enviadas al movil (para diagnostico). */
+    val samplesSent: Int = 0
 )

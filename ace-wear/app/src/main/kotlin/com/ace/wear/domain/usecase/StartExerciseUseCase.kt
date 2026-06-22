@@ -1,5 +1,4 @@
 // ace-wear/app/src/main/kotlin/com/ace/wear/domain/usecase/StartExerciseUseCase.kt
-
 package com.ace.wear.domain.usecase
 
 import com.ace.wear.data.repository.WearHealthRepository
@@ -10,7 +9,7 @@ import javax.inject.Inject
  *
  * Responsabilidades:
  * 1. Inicializar el repositorio de salud (al arrancar la app)
- * 2. Iniciar sesion de ejercicio (sensor de FC)
+ * 2. Iniciar sesion de ejercicio (sensor de FC o simulacion)
  *
  * El reloj no decide; solo reacciona a ordenes del ViewModel.
  */
@@ -28,7 +27,7 @@ class StartExerciseUseCase @Inject constructor(
 
     /**
      * Inicia la sesion de ejercicio en el reloj.
-     * Activa el sensor de FC.
+     * Activa el sensor de FC o modo simulacion si no hay permisos.
      *
      * @param sessionId ID de la sesion a iniciar
      */

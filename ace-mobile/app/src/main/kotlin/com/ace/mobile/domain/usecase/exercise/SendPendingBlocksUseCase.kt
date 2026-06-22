@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/domain/usecase/exercise/SendPendingBlocksUseCase.kt
 package com.ace.mobile.domain.usecase.exercise
 
 import android.util.Log
@@ -10,7 +11,6 @@ import com.ace.shared.constants.SyncConstants
 import com.ace.shared.dto.ClientStatsDto
 import com.ace.shared.dto.ExerciseBlockDto
 import com.ace.shared.dto.SyncBatchRequestDto
-import com.ace.shared.dto.XpAwardedResponseDto
 import com.ace.shared.enums.BlockStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,11 +46,10 @@ class SendPendingBlocksUseCase @Inject constructor(
         val syncingIds = pendingBlocks.map { it.blockId }
         blockDao.updateStatus(syncingIds, BlockStatus.SYNCING.name)
 
-        val blockDtos = pendingBlocks.map { it.toDto() }
         val deviceId = deviceIdManager.deviceId
+        val blockDtos = pendingBlocks.map { it.toDto(deviceId) }
         val user = userDao.getCurrentUser()
 
-        // v1.0.5: Ahora podemos pasar sessionId, sentAt y schemaVersion
         val request = SyncBatchRequestDto(
             blocks = blockDtos,
             clientStats = buildClientStats(pendingBlocks, user?.userId),
@@ -84,7 +83,6 @@ class SendPendingBlocksUseCase @Inject constructor(
                     return Result.NetworkError("Empty response body")
                 }
 
-                // v1.0.5: Usar xpDetails para granularidad por bloque
                 val xpDetails = body.xpDetails.associateBy { it.blockId }
                 val acceptedIds = body.acceptedBlocks.toSet()
                 val rejectedIds = body.rejectedBlocks.map { it.blockId }.toSet()
@@ -100,9 +98,8 @@ class SendPendingBlocksUseCase @Inject constructor(
                             blockDao.updateStatus(listOf(block.blockId), BlockStatus.SYNCED.name)
                             syncedCount++
 
-                            // v1.0.5: Actualizar XP total local con balanceAfter
                             xpDetail?.let {
-                                userDao.updateTotalXp(block.userId, it.balanceAfter.toInt())
+                                userDao.updateTotalXp(block.userId, it.balanceAfter)
                             }
 
                             Log.d(TAG, "Block ${block.blockId} synced, balance=${xpDetail?.balanceAfter}")
@@ -117,14 +114,12 @@ class SendPendingBlocksUseCase @Inject constructor(
                         }
 
                         else -> {
-                            // No mencionado en respuesta: volver a PENDING
                             blockDao.updateStatus(listOf(block.blockId), BlockStatus.PENDING.name)
                             Log.w(TAG, "Block ${block.blockId} not mentioned in response")
                         }
                     }
                 }
 
-                // v1.0.5: Actualizar streak cache
                 userDao.updateStreakCache(
                     originalBlocks.first().userId,
                     body.streakState.currentStreak,
@@ -132,10 +127,8 @@ class SendPendingBlocksUseCase @Inject constructor(
                     body.streakState.lastExerciseDate?.let { parseDateToMillis(it) }
                 )
 
-                // v1.0.5: Invalidar ranking cache si rankChanged
                 if (body.rankChanged) {
                     Log.i(TAG, "Rank changed! Invalidating ranking cache")
-                    // TODO: Invalidar cache de ranking
                 }
 
                 Log.i(TAG, "Sync resolved: $syncedCount synced, $errorCount errors")
@@ -169,7 +162,6 @@ class SendPendingBlocksUseCase @Inject constructor(
             blocks.map { it.avgBpm }.average()
         } else 0.0
 
-        // v1.0.5: Ahora podemos pasar userId, lastSyncAt y schemaVersion
         return ClientStatsDto(
             totalXp = totalXp,
             totalSessions = 1,
@@ -191,12 +183,12 @@ class SendPendingBlocksUseCase @Inject constructor(
     }
 }
 
-private fun LocalBlockEntity.toDto(): ExerciseBlockDto {
-    return ExerciseBlockDto(
+private fun LocalBlockEntity.toDto(deviceId: String): com.ace.shared.dto.ExerciseBlockDto {
+    return com.ace.shared.dto.ExerciseBlockDto(
         blockId = this.blockId,
         sessionId = this.sessionId,
         userId = this.userId,
-        deviceId = "", // Se pone en el SyncBatchRequestDto
+        deviceId = deviceId,
         sportType = this.sportType,
         timestampStart = this.timestampStart,
         timestampEnd = this.timestampEnd,
@@ -206,6 +198,6 @@ private fun LocalBlockEntity.toDto(): ExerciseBlockDto {
         minBpm = this.minBpm,
         sampleCount = this.sampleCount,
         xpCalculated = this.xpCalculated ?: 0,
-        schemaVersion = SyncConstants.CURRENT_SCHEMA_VERSION
+        schemaVersion = com.ace.shared.constants.SyncConstants.CURRENT_SCHEMA_VERSION
     )
 }

@@ -1,3 +1,4 @@
+// ace-wear/app/src/main/kotlin/com/ace/wear/presentation/session/SessionScreen.kt
 package com.ace.wear.presentation.session
 
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,8 @@ fun SessionScreen(
         diagLogs = state.diagLogs,
         hasSensorPermission = state.hasSensorPermission,
         permissionDenied = state.permissionDenied,
+        isSimulationMode = state.isSimulationMode,
+        samplesSent = state.samplesSent,
         onStopClicked = { viewModel.onStopButtonClicked() }
     )
 }
@@ -58,6 +61,8 @@ private fun SessionContent(
     diagLogs: List<String>,
     hasSensorPermission: Boolean,
     permissionDenied: Boolean,
+    isSimulationMode: Boolean,
+    samplesSent: Int,
     onStopClicked: () -> Unit
 ) {
     Column(
@@ -83,14 +88,25 @@ private fun SessionContent(
         }
 
         // === ALERTA DE PERMISO ===
-        if (permissionDenied) {
+        if (permissionDenied && !isSimulationMode) {
             Text(
-                text = "Permiso de sensor requerido",
+                text = "Permiso denegado - modo simulacion",
                 style = MaterialTheme.typography.body2,
                 color = Color(0xFFFFA000),
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(4.dp))
+        }
+
+        // === MODO SIMULACION ===
+        if (isSimulationMode) {
+            Text(
+                text = "SIMULACION",
+                style = MaterialTheme.typography.caption2,
+                color = Color(0xFF00E5FF),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(2.dp))
         }
 
         // === FC EN VIVO ===
@@ -105,6 +121,17 @@ private fun SessionContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
+        // === SAMPLES ENVIADOS ===
+        if (isSessionActive && samplesSent > 0) {
+            Text(
+                text = "$samplesSent enviados",
+                style = MaterialTheme.typography.caption3,
+                color = Color(0xFFAAAAAA),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+        }
+
         // === BOTON DETENER O MENSAJE DE ESPERA ===
         if (isSessionActive) {
             StopButton(onClick = onStopClicked)
@@ -112,8 +139,8 @@ private fun SessionContent(
             Text(
                 text = when {
                     !isConnected -> "Sin conexion al movil"
-                    permissionDenied -> "Permiso denegado"
-                    !hasSensorPermission -> "Esperando permiso..."
+                    permissionDenied && !isSimulationMode -> "Permiso denegado"
+                    !hasSensorPermission && !isSimulationMode -> "Esperando permiso..."
                     else -> "Esperando START..."
                 },
                 style = MaterialTheme.typography.body2,

@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/data/local/database/entity/LocalSessionEntity.kt
 package com.ace.mobile.data.local.database.entity
 
 import androidx.room.Entity
@@ -14,5 +15,5 @@ data class LocalSessionEntity(
     val timestampStart: Long,
     val timestampEnd: Long?,
     val totalBlocks: Int,
-    val totalXp: Int
+    val totalXp: Long
 )

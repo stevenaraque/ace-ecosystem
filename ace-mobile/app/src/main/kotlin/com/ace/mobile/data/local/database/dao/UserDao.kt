@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/data/local/database/dao/UserDao.kt
 package com.ace.mobile.data.local.database.dao
 
 import androidx.room.Dao
@@ -26,8 +27,6 @@ interface UserDao {
     @Query("DELETE FROM local_user")
     suspend fun clearUser()
 
-    // ─── Tokens (S4) ───
-
     @Query("UPDATE local_user SET accessToken = :token, tokenExpiresAt = :expiresAt WHERE userId = :userId")
     suspend fun updateAccessToken(userId: String, token: String, expiresAt: Long)
 
@@ -37,13 +36,9 @@ interface UserDao {
     @Query("UPDATE local_user SET accessToken = NULL, refreshToken = NULL, tokenExpiresAt = NULL WHERE userId = :userId")
     suspend fun clearTokens(userId: String)
 
-    // ─── Streak cache (S7) ───
-
     @Query("UPDATE local_user SET currentStreak = :streak, bestStreak = :best, lastExerciseDate = :date WHERE userId = :userId")
     suspend fun updateStreakCache(userId: String, streak: Int, best: Int, date: Long?)
 
-    // ─── XP cache (S10) ───
-
     @Query("UPDATE local_user SET totalXp = :xp WHERE userId = :userId")
-    suspend fun updateTotalXp(userId: String, xp: Int)
+    suspend fun updateTotalXp(userId: String, xp: Long)
 }

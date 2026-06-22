@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 import sena.adso.ace_backend.exercise.model.ExerciseSession
 import sena.adso.ace_backend.exercise.repository.SessionRepository
 import sena.adso.ace_backend.streak.service.StreakEvaluationService
+import sena.adso.ace_backend.xp.service.RankEvaluator
 import sena.adso.ace_backend.xp.service.XpSanityValidator
 import sena.adso.ace_backend.xp.service.XpTransactionService
 import java.time.Instant
@@ -22,7 +23,8 @@ class SyncBatchService(
     private val xpSanityValidator: XpSanityValidator,
     private val xpTransactionService: XpTransactionService,
     private val streakEvaluationService: StreakEvaluationService,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val rankEvaluator: RankEvaluator  // ← NUEVO
 ) {
 
     @Transactional
@@ -34,6 +36,11 @@ class SyncBatchService(
             "device=${request.deviceId}, " +
             "sentAt=${request.sentAt}"
         }
+
+        // ─── Calcular rango ANTES de procesar bloques ───
+        val balanceBefore = xpTransactionService.getCurrentBalance(userId)
+        val rankBefore = rankEvaluator.evaluateRank(userId, balanceBefore.toLong())
+        logger.debug { "User $userId rank before: ${rankBefore.rankName} (xp=$balanceBefore)" }
 
         // ─── Persistir/actualizar ExerciseSession ───
         persistOrUpdateSession(request, userId)
@@ -63,6 +70,15 @@ class SyncBatchService(
             }
         }
 
+        // ─── Calcular rango DESPUÉS de procesar bloques ───
+        val balanceAfter = xpTransactionService.getCurrentBalance(userId)
+        val rankAfter = rankEvaluator.evaluateRank(userId, balanceAfter.toLong())
+        val rankChanged = rankBefore.rankId != rankAfter.rankId
+        
+        if (rankChanged) {
+            logger.info { "User $userId RANK UP! ${rankBefore.rankName} → ${rankAfter.rankName}" }
+        }
+
         // v1.0.5: Evaluar racha con el último bloque aceptado
         val lastAcceptedBlock = request.blocks.find { it.blockId in acceptedBlocks }
         val streakState = if (lastAcceptedBlock != null) {
@@ -77,7 +93,6 @@ class SyncBatchService(
                 )
             }
         } else {
-            // No hubo bloques aceptados: devolver racha actual sin cambios
             val currentStreak = streakEvaluationService.getCurrentStreak(userId)
             StreakStateDto(
                 currentStreak = currentStreak?.currentStreak ?: 0,
@@ -87,28 +102,26 @@ class SyncBatchService(
         }
 
         // v1.0.5: Stats oficiales
-        val currentBalance = xpTransactionService.getCurrentBalance(userId)
         val officialStats = OfficialStatsDto(
-            officialTotalXp = currentBalance.toLong(),
-            officialTotalSessions = request.clientStats.totalSessions, // TODO: calcular real
+            officialTotalXp = balanceAfter.toLong(),
+            officialTotalSessions = request.clientStats.totalSessions,
             officialTotalBlocks = acceptedBlocks.size,
             officialTotalDurationSeconds = request.blocks
                 .filter { it.blockId in acceptedBlocks }
                 .sumOf { it.durationSeconds.toLong() },
-            officialAvgBpmAllTime = request.clientStats.avgBpmAllTime, // TODO: calcular real
+            officialAvgBpmAllTime = request.clientStats.avgBpmAllTime,
             correctionApplied = rejectedBlocks.isNotEmpty(),
             correctionReason = if (rejectedBlocks.isNotEmpty()) 
                 "${rejectedBlocks.size} bloques rechazados" else null
         )
 
-        // v1.0.5: Detectar si cambió el ranking (TODO S6: implementar real)
-        val rankChanged = false // TODO S6: comparar posición antes/después
-
         logger.info {
             "Batch processed for user $userId: " +
             "${acceptedBlocks.size} accepted, " +
             "${rejectedBlocks.size} rejected, " +
-            "balance=$currentBalance"
+            "balance=$balanceAfter, " +
+            "rank=${rankAfter.rankName}, " +
+            "rankChanged=$rankChanged"
         }
 
         return SyncBatchResponseDto(
@@ -121,11 +134,16 @@ class SyncBatchService(
         )
     }
 
+    // ... resto de métodos sin cambios (persistOrUpdateSession, processSingleBlock, BlockResult)
+    
+    // En processSingleBlock, actualizar xpDetail con rankChanged real:
+    // (solo cambia el constructor de XpAwardedResponseDto en cada return)
+    
     /**
-     * Persiste la ExerciseSession del batch.
-     * Si ya existe, actualiza contadores (idempotencia por sessionId).
+     * Persiste la ExerciseSession del batch...
      */
     private fun persistOrUpdateSession(request: SyncBatchRequestDto, userId: UUID) {
+        // ... mismo código que tienes ahora ...
         if (request.blocks.isEmpty()) return
 
         val firstBlock = request.blocks.first()
@@ -136,7 +154,7 @@ class SyncBatchService(
             return
         }
 
-        val acceptedBlocks = request.blocks.filter { it.xpCalculated > 0 } // Aproximación: asumimos que xp>0 = aceptado
+        val acceptedBlocks = request.blocks.filter { it.xpCalculated > 0 }
         val totalXp = acceptedBlocks.sumOf { it.xpCalculated }
 
         if (!sessionRepository.existsBySessionId(sessionId)) {
@@ -209,14 +227,13 @@ class SyncBatchService(
         val wasPersisted = blockPersistenceService.persistIfNotExists(dto)
         
         if (!wasPersisted) {
-            // Bloque ya existía
             val currentBalance = xpTransactionService.getCurrentBalance(userId)
             
             return BlockResult(
                 isAccepted = true,
                 xpDetail = XpAwardedResponseDto(
                     blockId = dto.blockId,
-                    xpAccepted = 0, // Ya fue contado antes
+                    xpAccepted = 0,
                     xpRejected = 0,
                     newTotalXp = currentBalance.toLong(),
                     rankChanged = false,
@@ -237,7 +254,7 @@ class SyncBatchService(
                 xpAccepted = dto.xpCalculated,
                 xpRejected = 0,
                 newTotalXp = transaction.balanceAfter.toLong(),
-                rankChanged = false, // TODO S6
+                rankChanged = false, // Se calcula a nivel de batch, no por bloque
                 newRankId = null,
                 balanceAfter = transaction.balanceAfter.toLong(),
                 schemaVersion = SyncConstants.CURRENT_SCHEMA_VERSION

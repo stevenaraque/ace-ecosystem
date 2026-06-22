@@ -1,5 +1,4 @@
 // ace-wear/app/src/main/kotlin/com/ace/wear/data/repository/WearHealthRepository.kt
-
 package com.ace.wear.data.repository
 
 import android.util.Log
@@ -9,145 +8,159 @@ import com.ace.wear.data.sync.WearDataClient
 import com.ace.wear.data.sync.WearMessageClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Repositorio central del reloj.
- *
- * Responsabilidades S1:
- * 1. Escuchar muestras de FC del HealthServicesManager y enviarlas al movil
- * 2. Iniciar/detener el sensor cuando el ViewModel lo ordene
- * 3. Notificar al movil cuando el usuario detiene la sesion
- *
- * El reloj no escucha comandos del movil. Eso es responsabilidad del SessionViewModel.
- * El reloj no decide, no calcula, no persiste. Solo reacciona y transporta.
- */
+private const val TAG = "WearHealthRepository"
+private const val SENSOR_TIMEOUT_MS = 2000L
+
 @Singleton
 class WearHealthRepository @Inject constructor(
     private val healthServicesManager: HealthServicesManager,
     private val wearDataClient: WearDataClient,
     private val wearMessageClient: WearMessageClient
 ) {
-    companion object {
-        private const val TAG = "WearHealthRepository"
-    }
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /**
-     * Estado actual de la sesion en el reloj.
-     */
+    private val _isSimulationMode = MutableStateFlow(false)
+    val isSimulationMode: StateFlow<Boolean> = _isSimulationMode.asStateFlow()
+
+    private val _samplesSent = MutableStateFlow(0)
+    val samplesSent: StateFlow<Int> = _samplesSent.asStateFlow()
+
     private var isSessionActive = false
+    private var samplesSentCount = 0
+    private var sensorFailed = false
 
-    /**
-     * Inicializa el repositorio.
-     * Escucha muestras de FC del sensor para enviarlas al movil.
-     * NO escucha comandos del movil (eso lo hace SessionViewModel).
-     */
-    fun initialize() {
-        Log.i(TAG, "Inicializando WearHealthRepository...")
+    // FIX BUG 3: Job mutable para poder cancelar la suscripción anterior
+    private var heartRateCollectionJob: Job? = null
 
-        // Escuchar muestras de FC y enviarlas al movil
-        healthServicesManager.heartRateSamples
-            .onEach { sample ->
-                sendSampleToMobile(sample)
-            }
-            .launchIn(scope)
-
-        Log.i(TAG, "WearHealthRepository inicializado. Esperando orden de inicio desde ViewModel.")
+    init {
+        // FIX BUG 3: Iniciar la primera suscripción y guardar el Job
+        heartRateCollectionJob = startHeartRateCollection()
     }
 
-    /**
-     * Inicia la sesion de ejercicio en el reloj.
-     * Llama al sensor de FC y marca la sesion como activa.
-     *
-     * @param sessionId ID de la sesion (para validacion interna)
-     */
-    fun startSession(sessionId: String) {
+    fun initialize() {
+        Log.i(TAG, "WearHealthRepository inicializado")
+    }
+
+    fun startSession(sessionId: String): Boolean {
         if (isSessionActive) {
-            Log.w(TAG, "Sesion ya activa, ignorando startSession()")
-            return
+            Log.w(TAG, "Sesion ya activa")
+            return true
         }
 
-        Log.i(TAG, "START ordenado por ViewModel para sesion: $sessionId")
+        Log.i(TAG, "START para sesion: $sessionId")
         isSessionActive = true
+        samplesSentCount = 0
+        _samplesSent.value = 0
+        sensorFailed = false
+
+        val sensorStarted = healthServicesManager.startHeartRateMonitoring()
+        Log.i(TAG, "Solicitud de sensor enviada: success=$sensorStarted")
+
+        if (!sensorStarted) {
+            Log.w(TAG, "Sensor rechazó inmediatamente. Activando simulación...")
+            activateSimulation()
+            return true
+        }
 
         scope.launch {
-            try {
-                healthServicesManager.startHeartRateMonitoring()
-                Log.i(TAG, "Monitoreo de FC iniciado")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error iniciando monitoreo de FC", e)
-                isSessionActive = false
+            delay(SENSOR_TIMEOUT_MS)
+            if (isSessionActive && !sensorFailed && _samplesSent.value == 0) {
+                Log.w(TAG, "Timeout: no hay muestras del sensor. Activando simulación...")
+                sensorFailed = true
+                activateSimulation()
             }
         }
+
+        return true
     }
 
-    /**
-     * Detiene la sesion activa en el reloj.
-     * Detiene el sensor y notifica al movil que el reloj detuvo.
-     *
-     * @param sessionId ID de la sesion a detener
-     */
+    private fun activateSimulation() {
+        if (_isSimulationMode.value) return
+
+        Log.i(TAG, "=== ACTIVANDO MODO SIMULACION ===")
+        healthServicesManager.startSimulationMode()
+        _isSimulationMode.value = true
+
+        // FIX BUG 3: Cancelar la suscripción anterior antes de crear una nueva
+        heartRateCollectionJob?.cancel()
+        heartRateCollectionJob = startHeartRateCollection()
+    }
+
     fun stopSession(sessionId: String) {
         if (!isSessionActive) {
-            Log.w(TAG, "No hay sesion activa para detener")
+            Log.w(TAG, "No hay sesion activa")
             return
         }
 
-        Log.i(TAG, "STOP ordenado por ViewModel para sesion: $sessionId")
+        Log.i(TAG, "STOP para sesion: $sessionId")
         isSessionActive = false
 
         scope.launch {
             try {
                 healthServicesManager.stopHeartRateMonitoring()
-                Log.i(TAG, "Monitoreo de FC detenido")
+                Log.i(TAG, "Monitoreo detenido (simulacion=${_isSimulationMode.value})")
 
-                // Notificar al movil que el reloj detuvo
                 wearMessageClient.sendStoppedToMobile(sessionId)
-                Log.i(TAG, "STOPPED enviado al movil desde stopSession()")
+                Log.i(TAG, "STOPPED enviado al movil")
+
+                _isSimulationMode.value = false
+                sensorFailed = false
+                samplesSentCount = 0
+                _samplesSent.value = 0
+
             } catch (e: Exception) {
-                Log.e(TAG, "Error deteniendo sesion", e)
+                Log.e(TAG, "Error deteniendo", e)
             }
         }
     }
 
-    /**
-     * Envia una muestra de FC al movil.
-     * Solo envia si hay una sesion activa.
-     */
-    private fun sendSampleToMobile(sample: HeartRateSample) {
-        if (!isSessionActive) {
-            // Normal al inicio: el sensor puede emitir una muestra antes de que
-            // startSession() marque isSessionActive = true
-            return
-        }
-
-        wearDataClient.sendHeartRateSample(sample)
+    // FIX BUG 3: Extraer la suscripción a un método reutilizable
+    private fun startHeartRateCollection(): Job {
+        return healthServicesManager.heartRateSamples
+            .onEach { sample ->
+                if (isSessionActive) {
+                    sendSampleToMobile(sample)
+                }
+            }
+            .launchIn(scope)
     }
 
-    /**
-     * Limpia recursos al cerrar la app.
-     */
+    private fun sendSampleToMobile(sample: HeartRateSample) {
+        wearDataClient.sendHeartRateSample(sample)
+        samplesSentCount++
+        _samplesSent.value = samplesSentCount
+
+        if (samplesSentCount % 10 == 0) {
+            Log.d(TAG, "Total muestras enviadas: $samplesSentCount")
+        }
+    }
+
     fun dispose() {
-        Log.i(TAG, "Disponiendo WearHealthRepository...")
+        // FIX BUG 3: Cancelar el Job de colección antes de limpiar
+        heartRateCollectionJob?.cancel()
+        heartRateCollectionJob = null
 
         scope.launch {
             if (isSessionActive) {
                 healthServicesManager.stopHeartRateMonitoring()
             }
         }
-
         healthServicesManager.cleanup()
         wearDataClient.cleanup()
         scope.cancel()
-
         Log.i(TAG, "WearHealthRepository dispuesto")
     }
 }

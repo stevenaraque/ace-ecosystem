@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/data/local/database/dao/SessionDao.kt
 package com.ace.mobile.data.local.database.dao
 
 import androidx.room.Dao
@@ -23,4 +24,24 @@ interface SessionDao {
 
     @Update
     suspend fun updateSession(session: LocalSessionEntity)
+
+    /**
+     * Finaliza una sesión: actualiza estado, timestamp de fin, totales de bloques y XP.
+     * Usado por StopSessionUseCase al completar la sesión.
+     */
+    @Query("""
+        UPDATE local_sessions 
+        SET status = :status, 
+            timestampEnd = :timestampEnd, 
+            totalBlocks = :totalBlocks, 
+            totalXp = :totalXp 
+        WHERE sessionId = :sessionId
+    """)
+    suspend fun finalizeSession(
+        sessionId: String,
+        status: String,
+        timestampEnd: Long,
+        totalBlocks: Int,
+        totalXp: Long
+    )
 }

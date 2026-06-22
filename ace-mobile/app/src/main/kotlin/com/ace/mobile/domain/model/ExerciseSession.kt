@@ -1,3 +1,4 @@
+// app/src/main/kotlin/com/ace/mobile/domain/model/ExerciseSession.kt
 package com.ace.mobile.domain.model
 
 import com.ace.shared.enums.SessionStatus
@@ -12,5 +13,5 @@ data class ExerciseSession(
     val timestampStart: Long,
     val timestampEnd: Long?,
     val totalBlocks: Int,
-    val totalXp: Int
+    val totalXp: Long
 )

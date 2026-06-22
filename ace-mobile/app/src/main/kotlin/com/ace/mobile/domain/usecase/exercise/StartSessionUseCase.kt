@@ -1,10 +1,13 @@
+// app/src/main/kotlin/com/ace/mobile/domain/usecase/exercise/StartSessionUseCase.kt
 package com.ace.mobile.domain.usecase.exercise
 
 import android.util.Log
 import com.ace.mobile.data.local.database.dao.SessionDao
 import com.ace.mobile.data.local.database.entity.LocalSessionEntity
+import com.ace.mobile.data.repository.SessionSampleBuffer
 import com.ace.mobile.domain.model.ExerciseSession
 import com.ace.mobile.domain.usecase.wear.SendStartCommandUseCase
+import com.ace.mobile.domain.usecase.xp.CacheXpFormulasUseCase
 import com.ace.shared.enums.SessionStatus
 import com.ace.shared.enums.SportType
 import kotlinx.coroutines.Dispatchers
@@ -12,9 +15,13 @@ import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
+private const val TAG = "StartSessionUseCase"
+
 class StartSessionUseCase @Inject constructor(
     private val sessionDao: SessionDao,
-    private val sendStartCommandUseCase: SendStartCommandUseCase
+    private val sendStartCommandUseCase: SendStartCommandUseCase,
+    private val sessionSampleBuffer: SessionSampleBuffer,
+    private val cacheXpFormulasUseCase: CacheXpFormulasUseCase
 ) {
 
     suspend operator fun invoke(
@@ -22,9 +29,24 @@ class StartSessionUseCase @Inject constructor(
         userId: String
     ): Result<ExerciseSession> = withContext(Dispatchers.IO) {
         try {
+            // FIX BUG 2: Cachear fórmulas de XP antes de iniciar sesión
+            // Si falla, logueamos pero no bloqueamos el inicio de sesión
+            try {
+                Log.d(TAG, "Caching XP formulas before session start...")
+                val cacheResult = cacheXpFormulasUseCase()
+                cacheResult.onSuccess { count ->
+                    Log.i(TAG, "XP formulas cached: $count formulas")
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to cache XP formulas: ${error.message}. Will retry during block build.")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Exception caching XP formulas: ${e.message}")
+            }
+
             val activeSession = sessionDao.getActiveSession()
             activeSession?.let {
                 sessionDao.updateSessionStatus(it.sessionId, SessionStatus.ABORTED.name)
+                sessionSampleBuffer.clear(it.sessionId)
             }
 
             val sessionId = UUID.randomUUID().toString()
@@ -44,9 +66,12 @@ class StartSessionUseCase @Inject constructor(
             )
             sessionDao.insertSession(sessionEntity)
 
+            sessionSampleBuffer.setActiveSessionId(sessionId)
+            Log.i(TAG, "Session $sessionId started, buffer activated")
+
             val sendResult = sendStartCommandUseCase(sessionId)
             if (sendResult is SendStartCommandUseCase.Result.Error) {
-                Log.w("StartSessionUseCase", "Reloj no al alcance: ${sendResult.message}")
+                Log.w(TAG, "Reloj no al alcance: ${sendResult.message}")
             }
 
             Result.success(
@@ -64,6 +89,7 @@ class StartSessionUseCase @Inject constructor(
             )
 
         } catch (e: Exception) {
+            Log.e(TAG, "Error starting session", e)
             Result.failure(e)
         }
     }

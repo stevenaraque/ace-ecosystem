@@ -23,6 +23,7 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/auth/**").permitAll()
+                    .requestMatchers("/api/xp/formulas").permitAll()  // ← FIX: Fórmulas públicas
                     .requestMatchers("/actuator/**").permitAll()
                     .anyRequest().authenticated()
             }

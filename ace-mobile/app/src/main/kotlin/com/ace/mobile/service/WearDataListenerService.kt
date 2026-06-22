@@ -1,7 +1,10 @@
+// app/src/main/kotlin/com/ace/mobile/service/WearDataListenerService.kt
 package com.ace.mobile.service
 
 import android.content.Intent
 import android.util.Log
+import com.ace.mobile.data.repository.SessionSampleBuffer
+import com.ace.mobile.domain.model.HeartRateSample
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
@@ -13,19 +16,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * Servicio que escucha datos y mensajes del reloj Wear OS.
- *
- * Google Play Services levanta este servicio automaticamente cuando:
- * - Llegan datos por DataClient (FC del reloj)
- * - Llegan mensajes por MessageClient (comando STOPPED del reloj)
- * - Cambia el estado de conexion del nodo Wear OS
- *
- * Este servicio es el PUENTE entre el Data Layer y el ExerciseSyncService.
- */
 @AndroidEntryPoint
 class WearDataListenerService : WearableListenerService() {
 
@@ -41,47 +33,50 @@ class WearDataListenerService : WearableListenerService() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    @Inject
+    lateinit var sessionSampleBuffer: SessionSampleBuffer
+
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "WearDataListenerService creado")
     }
 
-    /**
-     * Recibe datos del reloj (FC via DataClient).
-     * Se activa cuando el reloj hace putDataItem().
-     */
     override fun onDataChanged(dataEvents: DataEventBuffer) {
-        Log.d(TAG, "onDataChanged: ${dataEvents.count} eventos")
+        var processedCount = 0
+        var errorCount = 0
 
-        dataEvents.forEach { event ->
-            if (event.type == DataEvent.TYPE_CHANGED) {
-                val dataItem = event.dataItem
-                val path = dataItem.uri.path ?: return@forEach
+        try {
+            dataEvents.forEach { event ->
+                if (event.type == DataEvent.TYPE_CHANGED) {
+                    val dataItem = event.dataItem
+                    val path = dataItem.uri.path ?: return@forEach
 
-                Log.d(TAG, "DataItem recibido: path=$path")
-
-                when {
-                    path.startsWith(PATH_HEART_RATE) -> {
-                        handleHeartRateData(dataItem)
-                    }
-                    else -> {
-                        Log.w(TAG, "Path desconocido: $path")
+                    when {
+                        path.startsWith(PATH_HEART_RATE) -> {
+                            if (handleHeartRateData(dataItem)) {
+                                processedCount++
+                            } else {
+                                errorCount++
+                            }
+                        }
+                        else -> {
+                            Log.w(TAG, "Path desconocido: $path")
+                        }
                     }
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing data events", e)
+        } finally {
+            // FIX BUG 4: Asegurar que dataEvents siempre se libere
+            dataEvents.release()
+            Log.d(TAG, "onDataChanged: processed=$processedCount, errors=$errorCount, totalEvents=${dataEvents.count}")
         }
-        dataEvents.release()
     }
 
-    /**
-     * Recibe mensajes del reloj (comandos via MessageClient).
-     * Se activa cuando el reloj hace sendMessage().
-     */
     override fun onMessageReceived(messageEvent: MessageEvent) {
         val path = messageEvent.path
         val data = messageEvent.data
-
-        Log.d(TAG, "onMessageReceived: path=$path, dataSize=${data.size}")
 
         when {
             path.startsWith(PATH_SESSION_STATUS) -> {
@@ -93,39 +88,43 @@ class WearDataListenerService : WearableListenerService() {
         }
     }
 
-    /**
-     * Se llama cuando un nodo Wear OS se conecta.
-     */
     override fun onPeerConnected(node: Node) {
         Log.i(TAG, "Wear OS conectado: ${node.displayName} (${node.id})")
     }
 
-    /**
-     * Se llama cuando un nodo Wear OS se desconecta.
-     */
     override fun onPeerDisconnected(node: Node) {
         Log.w(TAG, "Wear OS desconectado: ${node.displayName} (${node.id})")
     }
 
-    // ─── Handlers privados ───
-
-    private fun handleHeartRateData(dataItem: com.google.android.gms.wearable.DataItem) {
-        try {
+    /**
+     * FIX BUG 4: Retorna true si el sample fue procesado correctamente
+     */
+    private fun handleHeartRateData(dataItem: com.google.android.gms.wearable.DataItem): Boolean {
+        return try {
             val dataMap = DataMapItem.fromDataItem(dataItem).dataMap
             val bpm = dataMap.getDouble(KEY_BPM, 0.0)
             val timestamp = dataMap.getLong(KEY_TIMESTAMP, 0L)
 
-            if (bpm > 0 && timestamp > 0) {
-                Log.d(TAG, "FC recibida: bpm=$bpm, timestamp=$timestamp")
-
-                // TODO: Enviar al ExerciseSyncService via broadcast o inyectar repositorio
-                // Por ahora solo logueamos para verificar que llega
-            } else {
+            if (bpm <= 0 || timestamp <= 0) {
                 Log.w(TAG, "FC invalida: bpm=$bpm, timestamp=$timestamp")
+                return false
+            }
+
+            val sessionId = sessionSampleBuffer.getActiveSessionId()
+            if (sessionId != null) {
+                sessionSampleBuffer.addSample(
+                    sessionId,
+                    HeartRateSample(bpm = bpm, timestamp = timestamp)
+                )
+                true
+            } else {
+                Log.w(TAG, "FC recibida pero no hay sesión activa: bpm=$bpm")
+                false
             }
 
         } catch (e: Exception) {
             Log.e(TAG, "Error parseando FC", e)
+            false
         }
     }
 
@@ -140,8 +139,6 @@ class WearDataListenerService : WearableListenerService() {
             when (command) {
                 "STOPPED" -> {
                     Log.i(TAG, "STOPPED recibido de reloj: sessionId=$sessionId")
-
-                    // Enviar broadcast al ExerciseSyncService para que detenga la sesion
                     val intent = Intent(this, ExerciseSyncService::class.java).apply {
                         action = ExerciseSyncService.ACTION_STOP_SESSION
                         putExtra(ExerciseSyncService.EXTRA_SESSION_ID, sessionId)

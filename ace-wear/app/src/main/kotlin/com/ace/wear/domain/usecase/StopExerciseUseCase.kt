@@ -1,5 +1,4 @@
 // ace-wear/app/src/main/kotlin/com/ace/wear/domain/usecase/StopExerciseUseCase.kt
-
 package com.ace.wear.domain.usecase
 
 import com.ace.wear.data.repository.WearHealthRepository
@@ -19,7 +18,7 @@ class StopExerciseUseCase @Inject constructor(
 ) {
     /**
      * Detiene la sesion de ejercicio activa.
-     * - Detiene el sensor de FC
+     * - Detiene el sensor de FC o simulacion
      * - Notifica al movil que el reloj detuvo
      *
      * @param sessionId ID de la sesion a detener

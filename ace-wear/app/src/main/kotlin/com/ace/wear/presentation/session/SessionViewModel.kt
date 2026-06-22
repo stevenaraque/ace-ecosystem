@@ -1,3 +1,4 @@
+// ace-wear/app/src/main/kotlin/com/ace/wear/presentation/session/SessionViewModel.kt
 package com.ace.wear.presentation.session
 
 import android.util.Log
@@ -28,7 +29,7 @@ import javax.inject.Inject
  * Responsabilidades:
  * 1. UNICO escuchador de comandos START/STOP del movil via WearMessageClient
  * 2. Gestion de permisos BODY_SENSORS
- * 3. UI: timer, FC en vivo, estado de conexion
+ * 3. UI: timer, FC en vivo, estado de conexion, modo simulacion
  * 4. Ordena al use case iniciar/detener sensor (NO al repository directo)
  */
 @HiltViewModel
@@ -37,6 +38,7 @@ class SessionViewModel @Inject constructor(
     private val wearMessageClient: WearMessageClient,
     private val startExerciseUseCase: StartExerciseUseCase,
     private val stopExerciseUseCase: StopExerciseUseCase,
+    private val wearHealthRepository: WearHealthRepository,
     private val nodeClient: NodeClient
 ) : ViewModel() {
 
@@ -50,18 +52,16 @@ class SessionViewModel @Inject constructor(
 
     private var timerJob: Job? = null
     private var currentSessionId: String? = null
-
-    /** SessionId pendiente de iniciar (esperando permiso) */
     private var pendingSessionId: String? = null
-
-    /** Callback para lanzar el dialogo de permiso */
     private var permissionLauncher: (() -> Unit)? = null
 
     init {
         // Escuchar muestras de FC del HealthServicesManager para UI
         healthServicesManager.heartRateSamples
             .onEach { sample ->
-                _state.value = _state.value.copy(bpm = sample.bpm)
+                _state.value = _state.value.copy(
+                    bpm = sample.bpm
+                )
                 logDiag("FC recibida: ${sample.bpm.toInt()} bpm")
             }
             .launchIn(viewModelScope)
@@ -69,7 +69,22 @@ class SessionViewModel @Inject constructor(
         // Escuchar disponibilidad del sensor
         healthServicesManager.availability
             .onEach { availability ->
-                logDiag("Sensor disponibilidad: $availability")
+                logDiag("Sensor: $availability")
+            }
+            .launchIn(viewModelScope)
+
+        // Observar modo simulacion del repositorio
+        wearHealthRepository.isSimulationMode
+            .onEach { isSim ->
+                _state.value = _state.value.copy(isSimulationMode = isSim)
+                if (isSim) logDiag("=== MODO SIMULACION ACTIVO ===")
+            }
+            .launchIn(viewModelScope)
+
+        // Observar contador de samples enviados
+        wearHealthRepository.samplesSent
+            .onEach { count ->
+                _state.value = _state.value.copy(samplesSent = count)
             }
             .launchIn(viewModelScope)
 
@@ -78,11 +93,11 @@ class SessionViewModel @Inject constructor(
             .onEach { command ->
                 when (command) {
                     is WearMessageClient.WearCommand.Start -> {
-                        logDiag("COMANDO START recibido del movil: sessionId=${command.sessionId}")
+                        logDiag("COMANDO START: sessionId=${command.sessionId}")
                         handleStartCommand(command.sessionId)
                     }
                     is WearMessageClient.WearCommand.Stop -> {
-                        logDiag("COMANDO STOP recibido del movil: sessionId=${command.sessionId}")
+                        logDiag("COMANDO STOP: sessionId=${command.sessionId}")
                         handleStopFromMobile(command.sessionId)
                     }
                 }
@@ -90,26 +105,17 @@ class SessionViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /**
-     * Inicializa el ViewModel.
-     * Llama al use case que inicializa el repositorio de salud.
-     */
     fun initialize() {
         logDiag("=== INICIALIZANDO A.C.E WEAR ===")
         startExerciseUseCase()
+        wearHealthRepository.initialize()
         checkConnectionStatus()
     }
 
-    /**
-     * Registra el launcher de permiso desde MainActivity.
-     */
     fun setPermissionLauncher(launcher: () -> Unit) {
         permissionLauncher = launcher
     }
 
-    /**
-     * Llamado por MainActivity cuando el usuario responde al dialogo de permiso.
-     */
     fun onPermissionResult(isGranted: Boolean) {
         _state.value = _state.value.copy(
             hasSensorPermission = isGranted,
@@ -117,54 +123,48 @@ class SessionViewModel @Inject constructor(
         )
 
         if (isGranted) {
-            logDiag("Permiso BODY_SENSORS concedido")
+            logDiag("Permiso concedido")
             pendingSessionId?.let { sessionId ->
-                logDiag("Iniciando sesion pendiente: $sessionId")
+                logDiag("Iniciando pendiente: $sessionId")
                 pendingSessionId = null
                 startSessionInternal(sessionId)
             }
         } else {
-            logDiag("Permiso BODY_SENSORS DENEGADO - no se puede monitorear FC")
+            logDiag("Permiso DENEGADO - iniciando con simulacion...")
+            pendingSessionId?.let { sessionId ->
+                pendingSessionId = null
+                startSessionInternal(sessionId)
+            }
         }
     }
 
-    /**
-     * Maneja el comando START del movil.
-     * Si no tiene permiso, lo pide primero.
-     */
     private fun handleStartCommand(sessionId: String) {
         if (_state.value.hasSensorPermission) {
             startSessionInternal(sessionId)
         } else {
-            logDiag("START recibido pero falta permiso BODY_SENSORS - solicitando...")
+            logDiag("START sin permiso - solicitando...")
             pendingSessionId = sessionId
             permissionLauncher?.invoke()
-                ?: logDiag("ERROR: permissionLauncher no registrado")
+                ?: run {
+                    logDiag("No launcher, iniciando con simulacion")
+                    startSessionInternal(sessionId)
+                }
         }
     }
 
-    /**
-     * Inicia la sesion real (monitoreo de FC + timer).
-     * Solo llamar despues de confirmar que tiene permiso.
-     */
-    /**
-     * Inicia la sesion real (monitoreo de FC + timer).
-     * Solo llamar despues de confirmar que tiene permiso.
-     */
     private fun startSessionInternal(sessionId: String) {
         currentSessionId = sessionId
         _state.value = _state.value.copy(
             isSessionActive = true,
             elapsedSeconds = 0L,
             bpm = null,
-            lastError = null
+            lastError = null,
+            samplesSent = 0
         )
         logDiag("Sesion INICIADA: $sessionId")
 
-        // Ordenar al use case que inicie el sensor
-        startExerciseUseCase.startSession(sessionId)  // ← NUEVO
+        startExerciseUseCase.startSession(sessionId)
 
-        // Iniciar timer
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (true) {
@@ -176,41 +176,24 @@ class SessionViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Maneja el comando STOP del movil.
-     * Ordena al use case detener la sesion (sensor + notificar).
-     */
     private fun handleStopFromMobile(sessionId: String) {
-        logDiag("STOP recibido del movil para sesion: $sessionId")
-        stopExerciseUseCase(sessionId)  // ← USE CASE: detiene sensor + notifica
+        logDiag("STOP del movil: $sessionId")
+        stopExerciseUseCase(sessionId)
         stopSessionInternal()
     }
 
-    /**
-     * Usuario presiona DETENER en el reloj.
-     * Ordena al use case detener la sesion (sensor + notificar).
-     */
     fun onStopButtonClicked() {
         val sessionId = currentSessionId
         if (sessionId == null) {
-            logDiag("ERROR: Boton DETENER presionado pero no hay sesion activa")
+            logDiag("ERROR: DETENER sin sesion activa")
             return
         }
 
-        logDiag("Boton DETENER presionado por usuario")
-        logDiag("Deteniendo sesion: $sessionId")
-
-        // Detener UI INMEDIATAMENTE
+        logDiag("Boton DETENER presionado: $sessionId")
         stopSessionInternal()
-
-        // Ordenar al use case que detenga sensor y notifique al movil
-        stopExerciseUseCase(sessionId)  // ← USE CASE: detiene sensor + notifica
+        stopExerciseUseCase(sessionId)
     }
 
-    /**
-     * Detiene la UI de la sesion (timer, estado).
-     * Llamado tanto por STOP del movil como por DETENER del usuario.
-     */
     private fun stopSessionInternal() {
         currentSessionId = null
         pendingSessionId = null
@@ -218,15 +201,17 @@ class SessionViewModel @Inject constructor(
         _state.value = _state.value.copy(
             isSessionActive = false,
             bpm = null,
-            elapsedSeconds = 0L
+            elapsedSeconds = 0L,
+            isSimulationMode = false,
+            samplesSent = 0
         )
-        logDiag("UI detenida localmente")
+        logDiag("UI detenida")
     }
 
     private fun checkConnectionStatus() {
         viewModelScope.launch {
             try {
-                logDiag("Verificando nodos conectados...")
+                logDiag("Verificando nodos...")
                 val nodes = nodeClient.connectedNodes.await()
                 val hasConnectedNode = nodes.isNotEmpty()
 
@@ -236,21 +221,17 @@ class SessionViewModel @Inject constructor(
                     lastError = if (!hasConnectedNode) "No hay nodos" else null
                 )
 
-                logDiag("Nodos encontrados: ${nodes.size}")
+                logDiag("Nodos: ${nodes.size}")
                 nodes.forEach { node ->
-                    logDiag("  -> ${node.displayName} (${node.id})")
-                }
-
-                if (!hasConnectedNode) {
-                    logDiag("ADVERTENCIA: No hay movil conectado por DataLayer")
+                    logDiag("  -> ${node.displayName}")
                 }
 
             } catch (e: Exception) {
-                Log.e(TAG, "Error verificando nodos", e)
+                Log.e(TAG, "Error nodos", e)
                 _state.value = _state.value.copy(
                     isConnected = false,
                     nodeCount = 0,
-                    lastError = e.message ?: "Error desconocido"
+                    lastError = e.message
                 )
                 logDiag("ERROR: ${e.message}")
             }
@@ -263,13 +244,9 @@ class SessionViewModel @Inject constructor(
         logDiag("ViewModel destruido")
     }
 
-    /**
-     * Llamado por MainActivity.onDestroy().
-     * Libera todos los recursos del repositorio.
-     */
     fun dispose() {
         stopTimer()
-        stopExerciseUseCase.dispose()  // ← Limpia todo al cerrar app
+        stopExerciseUseCase.dispose()
         logDiag("Recursos liberados")
     }
 
@@ -278,9 +255,6 @@ class SessionViewModel @Inject constructor(
         timerJob = null
     }
 
-    /**
-     * Agrega un log de diagnostico al estado.
-     */
     private fun logDiag(message: String) {
         Log.d(TAG, message)
         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())

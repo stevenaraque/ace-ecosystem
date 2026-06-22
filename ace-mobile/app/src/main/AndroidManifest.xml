@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- PERMISOS EXISTENTES (sin tocar) -->
+    <!-- PERMISOS DE RED -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.BODY_SENSORS" />
 
-    <!-- PERMISO: ya no es necesario para WearableListenerService, pero lo dejamos por si acaso -->
-    <uses-permission android:name="com.google.android.gms.permission.WEARABLE_BIND_LISTENER" />
+    <!-- PERMISOS DE NOTIFICACIÓN -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- PERMISOS DE SENSORES -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
+
+    <!-- PERMISOS DE FOREGROUND SERVICE -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- PERMISOS DE WEAR OS -->
+    <uses-permission android:name="com.google.android.gms.permission.WEARABLE_BINDENER" />
 
     <application
         android:name="com.ace.mobile.MobileApplication"
@@ -24,7 +33,6 @@
         android:theme="@style/Theme.Acemobile"
         android:usesCleartextTraffic="false">
 
-        <!-- ACTIVITY PRINCIPAL: MainActivity como launcher -->
         <activity
             android:name="com.ace.mobile.presentation.MainActivity"
             android:exported="true"
@@ -36,23 +44,49 @@
             </intent-filter>
         </activity>
 
-        <!-- ACTIVITY ELIMINADA: WearDiagnosticActivity ya no es launcher -->
-        <!-- Se puede borrar o dejar sin launcher para acceso debug si la necesitas -->
         <activity
             android:name="com.ace.mobile.presentation.diagnostic.WearDiagnosticActivity"
             android:exported="true"
-            android:label="A.C.E Wear Diagnostic">
-            <!-- Sin intent-filter de launcher -->
-        </activity>
+            android:label="A.C.E Wear Diagnostic" />
 
-        <!-- SERVICE: Foreground Service para sesiones + receptor de mensajes del reloj -->
+        <!-- FOREGROUND SERVICE: dataSync -->
         <service
             android:name="com.ace.mobile.service.ExerciseSyncService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="health" />
+            android:foregroundServiceType="dataSync" />
 
+        <!-- WEAR OS LISTENER: escucha datos y mensajes del reloj -->
+        <service
+            android:name="com.ace.mobile.service.WearDataListenerService"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/ace/"
+                    android:scheme="wear" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/ace/"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
 
+        <!-- FIX BUG 1: Deshabilitar WorkManagerInitializer por defecto para usar Configuration.Provider manual -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                tools:node="remove" />
+        </provider>
 
     </application>
 

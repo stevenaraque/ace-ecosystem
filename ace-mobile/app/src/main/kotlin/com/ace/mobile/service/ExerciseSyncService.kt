@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.ace.mobile.MobileApplication
 import com.ace.mobile.service.worker.SyncBlockWorker
 import com.ace.shared.enums.NotificationChannelId
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,6 +25,8 @@ private const val FOREGROUND_NOTIFICATION_ID = 1
  * 1. Mostrar notificación persistente durante sesión activa (S8)
  * 2. Disparar SyncBlockWorker cuando se cierra un bloque (S3)
  * 3. Escuchar comandos START/STOP del wear (S1)
+ *
+ * NOTA: Usa FOREGROUND_SERVICE_TYPE_DATA_SYNC para evitar permisos de health en Android 14+.
  *
  * @see Apéndice S2 (Sesión) · Apéndice S8 (Notificaciones)
  */
@@ -78,13 +79,13 @@ class ExerciseSyncService : Service() {
             startForeground(
                 FOREGROUND_NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC  // ← CAMBIADO: SHORT_SERVICE → DATA_SYNC
             )
         } else {
             startForeground(FOREGROUND_NOTIFICATION_ID, notification)
         }
 
-        Log.i(TAG, "Foreground service started")
+        Log.i(TAG, "Foreground service started (dataSync)")
     }
 
     private fun stopForegroundService() {
@@ -95,22 +96,17 @@ class ExerciseSyncService : Service() {
 
     /**
      * Construye la notificación persistente de sesión activa.
-     * Usa icono del sistema (ic_media_play) para evitar dependencia de R.drawable.
      */
     private fun buildForegroundNotification(contentText: String): Notification {
         return NotificationCompat.Builder(this, NotificationChannelId.SESSION_ACTIVE.channelId)
             .setContentTitle("A.C.E — Entrenamiento en curso")
             .setContentText(contentText)
-            .setSmallIcon(android.R.drawable.ic_media_play) // Icono del sistema
+            .setSmallIcon(android.R.drawable.ic_media_play)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_WORKOUT)
             .build()
     }
 
-    /**
-     * Crea el canal de notificación para sesiones activas (S8).
-     * Usa el mismo ID que ya creó MobileApplication.
-     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -131,8 +127,8 @@ class ExerciseSyncService : Service() {
         const val ACTION_STOP_SESSION = "com.ace.mobile.ACTION_STOP_SESSION"
         const val ACTION_BLOCK_CLOSED = "com.ace.mobile.ACTION_BLOCK_CLOSED"
         const val EXTRA_SESSION_ID = "extra_session_id"
-        const val EXTRA_SPORT_TYPE = "extra_sport_type"   // ← AGREGAR
-        const val EXTRA_USER_ID = "extra_user_id"           // ← AGREGAR
+        const val EXTRA_SPORT_TYPE = "extra_sport_type"
+        const val EXTRA_USER_ID = "extra_user_id"
 
         fun startSession(context: android.content.Context) {
             val intent = Intent(context, ExerciseSyncService::class.java).apply {
