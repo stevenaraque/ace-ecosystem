@@ -29,7 +29,12 @@ class BlockRepository @Inject constructor(
         blockDao.insert(block)
         Log.i(TAG, "Block ${block.blockId} inserted (session=${block.sessionId}, xp=${block.xpCalculated})")
 
-        ExerciseSyncService.notifyBlockClosed(context, block.sessionId)
+        // FIX #7: try/catch para que el bloque no se pierda si el servicio falla
+        try {
+            ExerciseSyncService.notifyBlockClosed(context, block.sessionId)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to notify sync service: ${e.message}")
+        }
 
         return@withContext block.blockId
     }
@@ -40,8 +45,12 @@ class BlockRepository @Inject constructor(
         blockDao.insertAll(blocks)
         Log.i(TAG, "${blocks.size} blocks inserted")
 
-        blocks.firstOrNull()?.let {
-            ExerciseSyncService.notifyBlockClosed(context, it.sessionId)
+        blocks.firstOrNull()?.let { firstBlock ->
+            try {
+                ExerciseSyncService.notifyBlockClosed(context, firstBlock.sessionId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to notify sync service: ${e.message}")
+            }
         }
 
         return@withContext blocks.map { it.blockId }

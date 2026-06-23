@@ -12,7 +12,7 @@ data class BlockSummary(
 interface SessionSampleBuffer {
     fun setActiveSessionId(sessionId: String?)
     fun getActiveSessionId(): String?
-    fun addSample(sessionId: String, sample: HeartRateSample)
+    fun addSample(sessionId: String, sample: HeartRateSample)  // ← NO suspend
     fun getSamples(sessionId: String): List<HeartRateSample>
     fun clear(sessionId: String)
     fun observeSamples(): Flow<HeartRateSample>

@@ -28,12 +28,9 @@ class StopSessionUseCase @Inject constructor(
             val sessionEntity = sessionDao.getSessionById(sessionId)
                 ?: return@withContext Result.failure(Exception("Session not found"))
 
-            // 1. Enviar STOP al reloj
             Log.d(TAG, "Sending STOP to watch...")
             sendStopCommandUseCase(sessionId)
 
-            // 2. Forzar cierre del bloque final
-            // El buffer cancela su timer interno y cierra el bloque de forma segura
             Log.d(TAG, "Forcing final block close...")
             val finalBlockSummary = sessionSampleBuffer.forceCloseBlock(sessionId)
 
@@ -43,18 +40,15 @@ class StopSessionUseCase @Inject constructor(
                 Log.w(TAG, "No final block (no samples or rejected)")
             }
 
-            // 3. Limpiar buffer
             Log.d(TAG, "Clearing buffer...")
             sessionSampleBuffer.clear(sessionId)
 
-            // 4. Leer totales de BD
             val blocks = blockRepository.getBlocksBySession(sessionId)
             val totalBlocks = blocks.size
             val totalXp = blocks.sumOf { (it.xpCalculated ?: 0).toDouble() }
 
             Log.d(TAG, "Totals from DB: blocks=$totalBlocks, xp=$totalXp")
 
-            // 5. Finalizar sesión
             val timestampEnd = System.currentTimeMillis()
 
             sessionDao.finalizeSession(
@@ -67,7 +61,6 @@ class StopSessionUseCase @Inject constructor(
 
             Log.i(TAG, "Session finalized: $totalBlocks blocks, $totalXp XP")
 
-            // 6. Retornar
             Result.success(
                 ExerciseSession(
                     sessionId = sessionEntity.sessionId,

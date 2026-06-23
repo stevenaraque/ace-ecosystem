@@ -18,28 +18,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "SessionSampleBuffer"
 
-/**
- * Buffer de muestras de frecuencia cardíaca con cierre automático de bloques.
- *
- * REGLAS DE CIERRE:
- * - Primer bloque: se cierra cuando se acumulan ≥ 20 segundos de muestras
- * - Bloques siguientes: se cierran cada 60 segundos desde el último cierre
- * - Bloque final (al pausar): se cierra inmediatamente con las muestras acumuladas
- *
- * FIXES vs versión anterior:
- * 1. Sincronización atómica con Mutex para evitar race conditions
- * 2. Timer usa timestamps absolutos en vez de delay() acumulativo
- * 3. Buffer se limpia atómicamente junto con el cierre del bloque
- * 4. forceCloseBlock cancela el timer y cierra el bloque de forma segura
- */
 @Singleton
 class SessionSampleBufferImpl @Inject constructor(
     private val buildExerciseBlockUseCase: BuildExerciseBlockUseCase,
@@ -47,7 +31,7 @@ class SessionSampleBufferImpl @Inject constructor(
     private val sessionDao: SessionDao
 ) : SessionSampleBuffer {
 
-    private val samplesBySession = ConcurrentHashMap<String, java.util.TreeSet<HeartRateSample>>()
+    private val samplesBySession = ConcurrentHashMap<String, MutableSet<HeartRateSample>>()
 
     @Volatile
     private var activeSessionId: String? = null
@@ -57,20 +41,14 @@ class SessionSampleBufferImpl @Inject constructor(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var blockTimerJob: Job? = null
-    private var blockCountBySession = ConcurrentHashMap<String, Int>()
+    private val blockCountBySession = ConcurrentHashMap<String, Int>()
 
     private val duplicateCountBySession = ConcurrentHashMap<String, Int>()
-
-    /** Mutex para sincronizar addSample y closeBlockInternal */
-    private val blockMutex = Mutex()
-
-    /** Timestamp del último cierre de bloque por sesión (para calcular 60s) */
-    private val lastBlockCloseTime = ConcurrentHashMap<String, Long>()
+    private val bufferLock = Any()
 
     override fun setActiveSessionId(sessionId: String?) {
         Log.i(TAG, "=== setActiveSessionId: $sessionId ===")
 
-        // Cancelar timer anterior si existe
         if (activeSessionId != null && activeSessionId != sessionId) {
             stopBlockTimer()
         }
@@ -79,7 +57,6 @@ class SessionSampleBufferImpl @Inject constructor(
 
         if (sessionId != null) {
             blockCountBySession[sessionId] = 0
-            lastBlockCloseTime.remove(sessionId)
             startBlockTimer(sessionId)
         }
     }
@@ -87,42 +64,47 @@ class SessionSampleBufferImpl @Inject constructor(
     override fun getActiveSessionId(): String? = activeSessionId
 
     override fun getBlockCount(sessionId: String): Int {
-        val count = blockCountBySession.getOrDefault(sessionId, 0)
-        Log.d(TAG, "getBlockCount($sessionId) = $count")
-        return count
+        return blockCountBySession.getOrDefault(sessionId, 0)
     }
 
     override fun addSample(sessionId: String, sample: HeartRateSample) {
-        val set = samplesBySession.getOrPut(sessionId) {
-            java.util.TreeSet(compareBy { it.timestamp })
-        }
+        synchronized(bufferLock) {
+            val set = samplesBySession.getOrPut(sessionId) {
+                java.util.Collections.synchronizedSet(
+                    java.util.TreeSet(compareBy { it.timestamp })
+                )
+            }
 
-        val wasAdded = set.add(sample)
+            val wasAdded = set.add(sample)
 
-        if (wasAdded) {
-            _sampleFlow.tryEmit(sample)
-            Log.d(TAG, "Sample added: session=$sessionId, bpm=${sample.bpm.toInt()}, total=${set.size}")
-        } else {
-            duplicateCountBySession.merge(sessionId, 1, Int::plus)
-            Log.w(TAG, "DUPLICATE rejected: session=$sessionId, bpm=${sample.bpm.toInt()}")
+            if (wasAdded) {
+                _sampleFlow.tryEmit(sample)
+                Log.d(TAG, "Sample added: session=$sessionId, bpm=${sample.bpm.toInt()}, total=${set.size}")
+            } else {
+                duplicateCountBySession.merge(sessionId, 1, Int::plus)
+                Log.w(TAG, "DUPLICATE rejected: session=$sessionId")
+            }
         }
     }
 
     override fun getSamples(sessionId: String): List<HeartRateSample> {
-        return samplesBySession[sessionId]?.toList() ?: emptyList()
+        return synchronized(bufferLock) {
+            samplesBySession[sessionId]?.toList()?.sortedBy { it.timestamp } ?: emptyList()
+        }
     }
 
     override fun clear(sessionId: String) {
         Log.i(TAG, "=== clear($sessionId) ===")
-        samplesBySession.remove(sessionId)
+        synchronized(bufferLock) {
+            samplesBySession.remove(sessionId)
+        }
         duplicateCountBySession.remove(sessionId)
         blockCountBySession.remove(sessionId)
-        lastBlockCloseTime.remove(sessionId)
 
         if (activeSessionId == sessionId) {
             activeSessionId = null
             stopBlockTimer()
-            Log.i(TAG, "Session cleared and timer stopped: $sessionId")
+            Log.i(TAG, "Session cleared: $sessionId")
         }
     }
 
@@ -130,100 +112,79 @@ class SessionSampleBufferImpl @Inject constructor(
 
     override fun observeBlocks(): Flow<BlockSummary> = _blockFlow.asSharedFlow()
 
-    /**
-     * Fuerza cierre de bloque cuando el usuario pausa la sesión.
-     * Cancela el timer automático y cierra el bloque pendiente de forma segura.
-     */
     override suspend fun forceCloseBlock(sessionId: String): BlockSummary? {
         Log.i(TAG, "=== forceCloseBlock($sessionId) ===")
-
-        // Cancelar el timer para que no cierre bloques automáticos mientras forceCloseBlock corre
         stopBlockTimer()
 
-        return blockMutex.withLock {
-            val result = closeBlockInternal(sessionId, isForced = true)
-            Log.i(TAG, "forceCloseBlock result: ${result?.let { "Block #${it.blockCount}, XP=${it.xpGained}" } ?: "null"}")
-            result
+        val samples = getSamples(sessionId)
+        val currentCount = blockCountBySession.getOrDefault(sessionId, 0)
+        val isFirstBlock = currentCount == 0
+
+        // REGLA: Primer bloque necesita mínimo 20 segundos
+        if (isFirstBlock && samples.size >= 2) {
+            val durationMs = samples.last().timestamp - samples.first().timestamp
+            val MIN_FIRST_BLOCK_MS = 20_000L
+            if (durationMs < MIN_FIRST_BLOCK_MS) {
+                Log.w(TAG, "PRIMER BLOQUE RECHAZADO: ${durationMs}ms < ${MIN_FIRST_BLOCK_MS}ms (mínimo 20s), descartando")
+                synchronized(bufferLock) { samplesBySession.remove(sessionId) }
+                return null
+            }
         }
+
+        // Bloque #2 en adelante: siempre válidos, cualquier duración
+        val result = closeBlockInternal(sessionId)
+        Log.i(TAG, "forceCloseBlock result: ${result?.let { "Block #${it.blockCount}, XP=${it.xpGained}" } ?: "null"}")
+        return result
     }
 
-    /**
-     * Timer de bloques:
-     * - Primer bloque: espera hasta tener ≥ 20 segundos de muestras (chequea cada 500ms)
-     * - Bloques siguientes: espera 60 segundos DESDE el último cierre
-     */
+    // 🔧 NUEVO: Timer basado en timestamps de muestras, no en System.currentTimeMillis()
     private fun startBlockTimer(sessionId: String) {
         stopBlockTimer()
         blockCountBySession[sessionId] = 0
 
         blockTimerJob = scope.launch {
             Log.i(TAG, "=== Timer started for $sessionId ===")
-            var isFirstBlock = true
 
             while (activeSessionId == sessionId) {
-                val waitUntilMs = if (isFirstBlock) {
-                    // Primer bloque: esperar hasta que haya 20s de muestras
-                    // Usamos un loop de chequeo cada 500ms para precisión
-                    Log.d(TAG, "Primer bloque: esperando ${BuildExerciseBlockUseCase.MIN_BLOCK_DURATION_SECONDS}s de muestras...")
-                    waitForMinDuration(sessionId, BuildExerciseBlockUseCase.MIN_BLOCK_DURATION_SECONDS * 1000L)
-                } else {
-                    // Bloques siguientes: esperar 60s desde el último cierre
-                    val lastClose = lastBlockCloseTime[sessionId] ?: System.currentTimeMillis()
-                    val nextCloseTime = lastClose + BuildExerciseBlockUseCase.BLOCK_TIMER_MS
-                    val waitMs = nextCloseTime - System.currentTimeMillis()
+                // Esperar a que haya al menos 2 muestras
+                val samples = getSamples(sessionId)
+                if (samples.size < 2) {
+                    delay(500L)
+                    continue
+                }
 
-                    if (waitMs > 0) {
-                        Log.d(TAG, "Bloque siguiente: esperando ${waitMs}ms (hasta ${formatTime(nextCloseTime)})")
-                        delay(waitMs)
+                // Calcular duración basada en timestamps de las MUESTRAS (del reloj)
+                val firstTimestamp = samples.first().timestamp
+                val lastTimestamp = samples.last().timestamp
+                val durationMs = lastTimestamp - firstTimestamp
+
+                Log.d(TAG, "Checking: ${samples.size} samples, duration=${durationMs}ms")
+
+                // ¿Ya tenemos 60s de muestras?
+                if (durationMs >= BuildExerciseBlockUseCase.BLOCK_TIMER_MS) {
+                    Log.d(TAG, "Duration reached ${BuildExerciseBlockUseCase.BLOCK_TIMER_MS}ms, closing block")
+
+                    val summary = closeBlockInternal(sessionId)
+
+                    if (summary != null) {
+                        Log.d(TAG, "Block closed, starting next block")
                     } else {
-                        Log.d(TAG, "Bloque siguiente: tiempo ya pasado, cerrando inmediatamente")
+                        Log.d(TAG, "Block close returned null, retrying in 1s...")
+                        delay(1000)
                     }
-                    System.currentTimeMillis() // retornamos el timestamp actual como "señal de continuar"
+                } else {
+                    // No llegamos a 60s, esperar un poco y revisar
+                    delay(500L)
                 }
 
                 if (activeSessionId != sessionId) {
                     Log.d(TAG, "Session changed, breaking timer")
                     break
                 }
-
-                // Cerrar bloque con mutex para evitar race conditions
-                val summary = blockMutex.withLock {
-                    closeBlockInternal(sessionId, isForced = false)
-                }
-
-                if (summary != null) {
-                    isFirstBlock = false
-                    lastBlockCloseTime[sessionId] = System.currentTimeMillis()
-                    Log.d(TAG, "Bloque cerrado, siguiente será bloque regular. Last close: ${formatTime(lastBlockCloseTime[sessionId]!!)}")
-                } else {
-                    Log.d(TAG, "Bloque rechazado, reintentando...")
-                    // Pequeño delay antes de reintentar
-                    delay(500)
-                }
             }
 
             Log.i(TAG, "=== Timer ended for $sessionId ===")
         }
-    }
-
-    /**
-     * Espera hasta que el buffer tenga al menos [minDurationMs] de muestras.
-     * Chequea cada 500ms para no consumir CPU.
-     * Retorna el timestamp del momento en que se alcanzó la duración mínima.
-     */
-    private suspend fun waitForMinDuration(sessionId: String, minDurationMs: Long): Long {
-        while (activeSessionId == sessionId) {
-            val samples = getSamples(sessionId)
-            if (samples.size >= 2) {
-                val durationMs = samples.last().timestamp - samples.first().timestamp
-                if (durationMs >= minDurationMs) {
-                    Log.d(TAG, "Duración mínima alcanzada: ${durationMs}ms >= ${minDurationMs}ms")
-                    return System.currentTimeMillis()
-                }
-            }
-            delay(500L)
-        }
-        return System.currentTimeMillis()
     }
 
     private fun stopBlockTimer() {
@@ -232,19 +193,12 @@ class SessionSampleBufferImpl @Inject constructor(
         Log.i(TAG, "Timer stopped")
     }
 
-    /**
-     * Cierra un bloque: toma muestras, valida, calcula XP, guarda, emite.
-     *
-     * IMPORTANTE: Este método DEBE llamarse dentro de blockMutex.withLock {}
-     * para garantizar que addSample no modifica el buffer durante el cierre.
-     *
-     * Si el bloque es rechazado (solo puede pasar con el primer bloque < 20s),
-     * NO limpia el buffer para que el timer pueda reintentar.
-     */
-    private suspend fun closeBlockInternal(sessionId: String, isForced: Boolean): BlockSummary? {
-        Log.d(TAG, "=== closeBlockInternal: session=$sessionId, isForced=$isForced ===")
+    private suspend fun closeBlockInternal(sessionId: String): BlockSummary? {
+        Log.d(TAG, "=== closeBlockInternal: session=$sessionId ===")
 
-        val samples = getSamples(sessionId).toList()
+        val samples = synchronized(bufferLock) {
+            samplesBySession[sessionId]?.toList()?.sortedBy { it.timestamp } ?: emptyList()
+        }
 
         if (samples.isEmpty()) {
             Log.w(TAG, "No samples to close block")
@@ -252,13 +206,9 @@ class SessionSampleBufferImpl @Inject constructor(
         }
 
         val currentCount = blockCountBySession.getOrDefault(sessionId, 0)
-        val isFirstBlock = currentCount == 0
 
-        Log.d(TAG, "currentCount=$currentCount, isFirstBlock=$isFirstBlock, samples=${samples.size}")
-        Log.d(TAG, "First sample: ${samples.first().timestamp}, Last sample: ${samples.last().timestamp}")
-        Log.d(TAG, "Duration: ${(samples.last().timestamp - samples.first().timestamp) / 1000}s")
+        Log.d(TAG, "currentCount=$currentCount, samples=${samples.size}")
 
-        // Obtener datos de la sesión desde Room
         val sessionEntity = sessionDao.getSessionById(sessionId)
         if (sessionEntity == null) {
             Log.e(TAG, "Session $sessionId not found in DB!")
@@ -277,25 +227,16 @@ class SessionSampleBufferImpl @Inject constructor(
             totalXp = sessionEntity.totalXp
         )
 
-        Log.d(TAG, "Session data: userId=${session.userId}, sport=${session.sportType}")
-
-        val blockResult = buildExerciseBlockUseCase(session, samples, isFirstBlock)
+        // Ya no pasamos isForced, el use case solo calcula
+        val blockResult = buildExerciseBlockUseCase(session, samples)
 
         if (blockResult == null) {
-            Log.w(TAG, "Bloque RECHAZADO por BuildExerciseBlockUseCase")
-            Log.d(TAG, "NO limpio buffer, conservo ${samples.size} muestras para siguiente ciclo")
-            // NO limpiar buffer, conservar muestras para reintento
+            Log.w(TAG, "Bloque RECHAZADO (no samples)")
             return null
         }
 
         Log.i(TAG, "Bloque ACEPTADO: id=${blockResult.blockId}, duration=${blockResult.durationSeconds}s, xp=${blockResult.xpCalculated}")
 
-        // ATÓMICO: Limpiar buffer AHORA, bajo el mutex, para que addSample() no
-        // agregue muestras al buffer viejo después de que lo leímos
-        samplesBySession[sessionId] = java.util.TreeSet(compareBy { it.timestamp })
-        Log.d(TAG, "Buffer limpiado atómicamente para siguiente bloque")
-
-        // Guardar en SQLite
         val blockEntity = LocalBlockEntity(
             blockId = blockResult.blockId,
             sessionId = blockResult.sessionId,
@@ -315,7 +256,9 @@ class SessionSampleBufferImpl @Inject constructor(
         blockRepository.insertClosedBlock(blockEntity)
         Log.i(TAG, "Bloque guardado en BD: ${blockResult.blockId}")
 
-        // Actualizar contador
+        synchronized(bufferLock) { samplesBySession.remove(sessionId) }
+        Log.d(TAG, "Buffer limpiado para siguiente bloque")
+
         val newCount = currentCount + 1
         blockCountBySession[sessionId] = newCount
 
@@ -325,13 +268,8 @@ class SessionSampleBufferImpl @Inject constructor(
         )
 
         _blockFlow.emit(summary)
-        Log.i(TAG, "=== Bloque #$newCount cerrado: XP=${blockResult.xpCalculated}, emitido a UI ===")
+        Log.i(TAG, "=== Bloque #$newCount cerrado: XP=${blockResult.xpCalculated} ===")
 
         return summary
-    }
-
-    private fun formatTime(timestamp: Long): String {
-        val sdf = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault())
-        return sdf.format(java.util.Date(timestamp))
     }
 }
