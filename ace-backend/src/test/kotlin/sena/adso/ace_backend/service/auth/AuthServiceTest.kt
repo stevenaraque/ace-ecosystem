@@ -44,6 +44,7 @@ class AuthServiceTest {
 
         every { userRepository.findByEmail("test@ace.com") } returns user
         every { jwtService.generateAccessToken(userId, deviceId) } returns "access-token-123"
+        every { refreshTokenService.revokeAllUserTokens(userId) } returns Unit  // ← F7: mockear desalojo
         every { refreshTokenService.createRefreshToken(userId, deviceId) } returns "refresh-token-456"
 
         val request = AuthRequestDto(
@@ -61,6 +62,7 @@ class AuthServiceTest {
         assertEquals(900L, result.expiresIn) // 15 min * 60 = 900
 
         verify { userRepository.findByEmail("test@ace.com") }
+        verify { refreshTokenService.revokeAllUserTokens(userId) }  // ← F7: verificar desalojo
         verify { jwtService.generateAccessToken(userId, deviceId) }
         verify { refreshTokenService.createRefreshToken(userId, deviceId) }
     }
@@ -129,6 +131,7 @@ class AuthServiceTest {
             val user = arg<User>(0)
             user.copy(id = userId)
         }
+        every { refreshTokenService.revokeAllUserTokens(userId) } returns Unit  // ← F7: mockear desalojo
         every { jwtService.generateAccessToken(userId, deviceId) } returns "access-token-789"
         every { refreshTokenService.createRefreshToken(userId, deviceId) } returns "refresh-token-abc"
 
@@ -145,6 +148,7 @@ class AuthServiceTest {
 
         verify { userRepository.existsByEmail("new@ace.com") }
         verify { userRepository.save(any()) }
+        verify { refreshTokenService.revokeAllUserTokens(userId) }  // ← F7: verificar desalojo
     }
 
     @Test
