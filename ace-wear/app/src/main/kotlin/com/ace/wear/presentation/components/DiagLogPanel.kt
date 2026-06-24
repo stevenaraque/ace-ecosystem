@@ -10,16 +10,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
+import com.ace.wear.presentation.theme.AceBorder
+import com.ace.wear.presentation.theme.AceSurface
+import com.ace.wear.presentation.theme.AceTextMuted
 
-/**
- * Panel que muestra logs de diagnostico en tiempo real.
- * Solo visible en modo debug/diagnostico.
- */
 @Composable
 fun DiagLogPanel(
     logs: List<String>,
@@ -30,16 +28,16 @@ fun DiagLogPanel(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(60.dp)
-            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+            .height(44.dp)
+            .background(AceSurface, RoundedCornerShape(6.dp))
             .padding(4.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        logs.takeLast(5).forEach { log ->
+        logs.takeLast(3).forEach { log ->
             Text(
                 text = log,
                 style = MaterialTheme.typography.caption3,
-                color = Color(0xFF00FF00),
+                color = AceTextMuted,
                 textAlign = TextAlign.Start
             )
         }

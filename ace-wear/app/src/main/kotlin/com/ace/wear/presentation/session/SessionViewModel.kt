@@ -9,6 +9,7 @@ import com.ace.wear.data.repository.WearHealthRepository
 import com.ace.wear.data.sync.WearMessageClient
 import com.ace.wear.domain.usecase.StartExerciseUseCase
 import com.ace.wear.domain.usecase.StopExerciseUseCase
+import com.ace.wear.presentation.WearScreenState
 import com.ace.wear.presentation.WearSessionState
 import com.google.android.gms.wearable.NodeClient
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,7 @@ import javax.inject.Inject
  * 2. Gestion de permisos BODY_SENSORS
  * 3. UI: timer, FC en vivo, estado de conexion, modo simulacion
  * 4. Ordena al use case iniciar/detener sensor (NO al repository directo)
+ * 5. Gestion de estados de pantalla: SPLASH -> IDLE -> ACTIVE -> IDLE
  */
 @HiltViewModel
 class SessionViewModel @Inject constructor(
@@ -45,6 +47,7 @@ class SessionViewModel @Inject constructor(
     companion object {
         private const val TAG = "SessionViewModel"
         private const val MAX_LOGS = 20
+        private const val SPLASH_DURATION_MS = 2000L
     }
 
     private val _state = MutableStateFlow(WearSessionState())
@@ -56,6 +59,15 @@ class SessionViewModel @Inject constructor(
     private var permissionLauncher: (() -> Unit)? = null
 
     init {
+        // Transicion automatica: SPLASH -> IDLE despues de 2 segundos
+        viewModelScope.launch {
+            delay(SPLASH_DURATION_MS)
+            if (_state.value.screenState == WearScreenState.SPLASH) {
+                _state.value = _state.value.copy(screenState = WearScreenState.IDLE)
+                logDiag("SPLASH completado -> IDLE")
+            }
+        }
+
         // Escuchar muestras de FC del HealthServicesManager para UI
         healthServicesManager.heartRateSamples
             .onEach { sample ->
@@ -156,6 +168,7 @@ class SessionViewModel @Inject constructor(
         currentSessionId = sessionId
         _state.value = _state.value.copy(
             isSessionActive = true,
+            screenState = WearScreenState.ACTIVE,
             elapsedSeconds = 0L,
             bpm = null,
             lastError = null,
@@ -200,12 +213,13 @@ class SessionViewModel @Inject constructor(
         stopTimer()
         _state.value = _state.value.copy(
             isSessionActive = false,
+            screenState = WearScreenState.IDLE,
             bpm = null,
             elapsedSeconds = 0L,
             isSimulationMode = false,
             samplesSent = 0
         )
-        logDiag("UI detenida")
+        logDiag("UI detenida -> IDLE")
     }
 
     private fun checkConnectionStatus() {
