@@ -29,13 +29,16 @@ class MobileApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         // Detecta debug sin BuildConfig: si el package contiene "debug" es build debug
-        if (isDebugBuild() && isNewInstallation()) {
-            wipeAllAppData()
-        }
+
 
         super.onCreate()
         createNotificationChannels()
         Log.i("MobileApplication", "A.C.E Mobile initialized")
+
+        if (isDebugBuild() && isNewInstallation()) {
+            wipeAllAppData()
+        }
+
     }
 
     override val workManagerConfiguration: Configuration
