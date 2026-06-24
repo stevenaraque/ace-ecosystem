@@ -14,10 +14,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ace.mobile.presentation.auth.LoginScreen
 import com.ace.mobile.presentation.exercise.SessionScreen
+import com.ace.mobile.presentation.history.HistoryScreen
 import com.ace.mobile.presentation.home.HomeScreen
 import com.ace.mobile.presentation.profile.ProfileScreen
 import com.ace.mobile.presentation.profile.ProfileViewModel
 import com.ace.mobile.presentation.ranking.RankingScreen
+import com.ace.mobile.presentation.stats.StatsScreen
 import com.ace.mobile.data.local.database.dao.UserDao
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -43,7 +45,6 @@ class MainActivity : ComponentActivity() {
 
                 NavHost(
                     navController = navController,
-                    // Si hay sesión activa, empieza en Home. Si no, en Login.
                     startDestination = if (isLoggedIn) "home_screen_route" else "login_screen_route",
                     modifier = Modifier.padding(innerPadding)
                 ) {
@@ -59,7 +60,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    // RUTA B: Home (NUEVA)
+                    // RUTA B: Home
                     composable("home_screen_route") {
                         HomeScreen(navController = navController)
                     }
@@ -76,18 +77,28 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // RUTA D: Ranking (NUEVA)
+                    // RUTA D: Ranking
                     composable("ranking_screen_route") {
                         RankingScreen()
                     }
 
-                    // RUTA E: Perfil (solo logout)
+                    // RUTA E: Perfil
                     composable("profile_screen_route") {
                         val profileViewModel: ProfileViewModel = hiltViewModel()
                         ProfileScreen(
                             navController = navController,
                             viewModel = profileViewModel
                         )
+                    }
+
+                    // ← NUEVO Hito 4: Estadísticas
+                    composable("stats_screen_route") {
+                        StatsScreen(navController = navController)
+                    }
+
+                    // ← NUEVO Hito 4: Historial (sub-pantalla de Estadísticas)
+                    composable("history_screen_route") {
+                        HistoryScreen(navController = navController)
                     }
                 }
             }

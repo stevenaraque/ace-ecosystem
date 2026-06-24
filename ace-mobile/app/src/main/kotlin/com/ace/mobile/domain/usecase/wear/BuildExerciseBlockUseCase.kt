@@ -23,6 +23,11 @@ class BuildExerciseBlockUseCase @Inject constructor(
         // 🔧 CAMBIA ESTE NÚMERO PARA CAMBIAR LA DURACIÓN DEL BLOQUE
         const val BLOCK_TIMER_MS = 60_000L
         const val BLOCK_DURATION_SECONDS = (BLOCK_TIMER_MS / 1000).toInt()
+
+        // Duración mínima aceptable para un bloque. Coincide con el MIN_DURATION del
+        // backend (XpSanityValidator). Bloques más cortos (p.ej. el final forzado al
+        // detener la sesión con < 10s de datos) se descartan y no se envían a sync.
+        const val MIN_BLOCK_DURATION_SECONDS = 10
     }
 
     data class BlockResult(
@@ -62,6 +67,15 @@ class BuildExerciseBlockUseCase @Inject constructor(
         val durationSeconds = (durationMs / 1000).toInt()
 
         Log.d(TAG, "durationSeconds=$durationSeconds (from sample timestamps)")
+
+        // FIX: Descartar bloques demasiado cortos. Esto ocurre principalmente con el
+        // bloque final forzado al detener la sesión (forceCloseBlock) cuando quedan
+        // pocos segundos de datos. Un bloque < 10s no es representativo y el backend
+        // lo rechazaría de todos modos, así que ni lo creamos.
+        if (durationSeconds < MIN_BLOCK_DURATION_SECONDS) {
+            Log.w(TAG, "Bloque descartado: $durationSeconds < $MIN_BLOCK_DURATION_SECONDS (mínimo)")
+            return@withContext null
+        }
 
         val bpmValues = samples.map { it.bpm }
         val avgBpm = bpmValues.average()

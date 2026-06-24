@@ -17,10 +17,19 @@ interface UserDao {
     @Update
     suspend fun update(user: LocalUserEntity)
 
-    @Query("SELECT * FROM local_user LIMIT 1")
+    /**
+     * Devuelve el usuario actual.
+     *
+     * FIX: Antes era `SELECT * FROM local_user LIMIT 1` sin ORDER BY, lo que hacía
+     * que SQLite retornara la fila con menor rowid (el usuario más antiguo insertado),
+     * NO el último en loguear/refrescar. Al ordenar por tokenExpiresAt DESC, el
+     * usuario con el token más reciente (el autenticado actualmente) gana siempre.
+     * COALESCE por si existieran filas con tokenExpiresAt NULL.
+     */
+    @Query("SELECT * FROM local_user ORDER BY COALESCE(tokenExpiresAt, 0) DESC LIMIT 1")
     suspend fun getCurrentUser(): LocalUserEntity?
 
-    @Query("SELECT * FROM local_user LIMIT 1")
+    @Query("SELECT * FROM local_user ORDER BY COALESCE(tokenExpiresAt, 0) DESC LIMIT 1")
     fun observeCurrentUser(): Flow<LocalUserEntity?>
 
     @Query("DELETE FROM local_user")

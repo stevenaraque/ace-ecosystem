@@ -1,4 +1,3 @@
-// app/src/main/kotlin/com/ace/mobile/data/local/database/entity/LocalSessionHistoryEntity.kt
 package com.ace.mobile.data.local.database.entity
 
 import androidx.room.Entity
@@ -8,11 +7,12 @@ import androidx.room.PrimaryKey
 data class LocalSessionHistoryEntity(
     @PrimaryKey
     val sessionId: String,
-    val timestampStart: Long,
-    val timestampEnd: Long,
+    val userId: String,
+    val timestampStart: String,
+    val timestampEnd: String?,
     val sportType: String,
     val durationSeconds: Int,
-    val avgBpm: Double,
+    val totalXp: Int,
     val totalBlocks: Int,
-    val totalXp: Long
+    val avgBpm: Double?
 )

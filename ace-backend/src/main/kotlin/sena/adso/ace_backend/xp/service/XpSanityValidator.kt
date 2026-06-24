@@ -41,7 +41,10 @@ class XpSanityValidator {
             return ValidationResult.Invalid(block.blockId, "avgBpm out of range: ${block.avgBpm}")
         }
 
-        // R2: Consistencia temporal (270-330s)
+        // R2: Consistencia temporal (10-330s)
+        // FIX: El mínimo era 30, lo que rechazaba bloques finales cortos (p.ej. 14s al
+        // detener la sesión). Bajado a 10 para aceptarlos. El móvil también descarta
+        // los < 10s, así que la frontera coincide en ambos lados.
         if (block.durationSeconds < MIN_DURATION || block.durationSeconds > MAX_DURATION) {
             logger.warn { "Block ${block.blockId} rejected: duration ${block.durationSeconds}s out of range [$MIN_DURATION, $MAX_DURATION]" }
             return ValidationResult.Invalid(block.blockId, "duration out of range: ${block.durationSeconds}s")
@@ -90,7 +93,7 @@ class XpSanityValidator {
     companion object {
         const val MIN_BPM = 30.0
         const val MAX_BPM = 250.0
-        const val MIN_DURATION = 30
+        const val MIN_DURATION = 10
         const val MAX_DURATION = 330
         const val SAMPLE_TOLERANCE_PERCENT = 20
         const val MAX_XP_PER_BLOCK = 50

@@ -23,4 +23,7 @@ abstract class RepositoryModule {
     abstract fun bindSessionSampleBuffer(
         impl: SessionSampleBufferImpl
     ): SessionSampleBuffer
+
+    // ← NO agregar binds para StatsRepository ni HistoryRepository
+    // Ya tienen @Inject constructor, Hilt los inyecta directamente
 }

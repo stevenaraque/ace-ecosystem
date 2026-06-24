@@ -34,25 +34,44 @@ class SendPendingBlocksUseCase @Inject constructor(
 
     suspend operator fun invoke(sessionId: String? = null): Result = withContext(Dispatchers.IO) {
 
-        val pendingBlocks = blockDao.getPendingBlocks(SyncConstants.BATCH_MAX_SIZE)
+        val user = userDao.getCurrentUser()
+        val currentUserId = user?.userId
+
+        if (currentUserId == null) {
+            Log.w(TAG, "No authenticated user; cannot sync")
+            return@withContext Result.AuthError("No authenticated user")
+        }
+
+        // FIX D: Limpiar bloques huérfanos de userIds anteriores.
+        // Se crearon cuando getCurrentUser() devolvía un usuario equivocado y nunca
+        // podrán sincronizarse con el token del usuario actual (provocarían 403
+        // por mezclar userIds en el batch). Los eliminamos de una vez.
+        val orphanCount = blockDao.countOrphanPendingBlocks(currentUserId)
+        if (orphanCount > 0) {
+            val deleted = blockDao.deleteOrphanBlocks(currentUserId)
+            Log.w(TAG, "Cleaned up $deleted orphan blocks (userId != $currentUserId)")
+        }
+
+        // FIX D: Filtrar bloques PENDING por el userId del usuario actual.
+        // El backend rechaza con 403 si un batch mezcla bloques de varios userIds.
+        val pendingBlocks = blockDao.getPendingBlocksForUser(currentUserId, SyncConstants.BATCH_MAX_SIZE)
 
         if (pendingBlocks.isEmpty()) {
             Log.d(TAG, "No pending blocks to sync")
             return@withContext Result.NoPendingBlocks
         }
 
-        Log.i(TAG, "Syncing ${pendingBlocks.size} pending blocks")
+        Log.i(TAG, "Syncing ${pendingBlocks.size} pending blocks for user=$currentUserId")
 
         val syncingIds = pendingBlocks.map { it.blockId }
         blockDao.updateStatus(syncingIds, BlockStatus.SYNCING.name)
 
         val deviceId = deviceIdManager.deviceId
         val blockDtos = pendingBlocks.map { it.toDto(deviceId) }
-        val user = userDao.getCurrentUser()
 
         val request = SyncBatchRequestDto(
             blocks = blockDtos,
-            clientStats = buildClientStats(pendingBlocks, user?.userId),
+            clientStats = buildClientStats(pendingBlocks, currentUserId),
             deviceId = deviceId,
             sessionId = sessionId ?: pendingBlocks.first().sessionId,
             sentAt = System.currentTimeMillis(),

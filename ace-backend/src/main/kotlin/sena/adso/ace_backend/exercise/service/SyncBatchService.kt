@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 import sena.adso.ace_backend.exercise.model.ExerciseSession
 import sena.adso.ace_backend.exercise.repository.SessionRepository
 import sena.adso.ace_backend.streak.service.StreakEvaluationService
+import sena.adso.ace_backend.user.service.StatsPersistenceService
 import sena.adso.ace_backend.xp.service.RankEvaluator
 import sena.adso.ace_backend.xp.service.XpSanityValidator
 import sena.adso.ace_backend.xp.service.XpTransactionService
@@ -24,7 +25,8 @@ class SyncBatchService(
     private val xpTransactionService: XpTransactionService,
     private val streakEvaluationService: StreakEvaluationService,
     private val sessionRepository: SessionRepository,
-    private val rankEvaluator: RankEvaluator  // ← NUEVO
+    private val rankEvaluator: RankEvaluator,
+    private val statsPersistenceService: StatsPersistenceService  // ← NUEVO Hito 4
 ) {
 
     @Transactional
@@ -101,14 +103,36 @@ class SyncBatchService(
             )
         }
 
-        // v1.0.5: Stats oficiales
+        // ─── v1.0.5: Persistir stats oficiales en user_stats ───
+        val acceptedBlockDtos = request.blocks.filter { it.blockId in acceptedBlocks }
+        val acceptedDuration = acceptedBlockDtos.sumOf { it.durationSeconds.toLong() }
+        val acceptedXp = acceptedBlockDtos.sumOf { it.xpCalculated.toLong() }
+        val acceptedAvgBpm = acceptedBlockDtos
+            .map { it.avgBpm }
+            .average()
+            .takeIf { it.isFinite() }
+
+        statsPersistenceService.accumulate(
+            userId = userId,
+            xpDelta = acceptedXp,
+            sessionsDelta = if (acceptedBlockDtos.isNotEmpty()) 1 else 0,
+            blocksDelta = acceptedBlockDtos.size,
+            durationDelta = acceptedDuration,
+            avgBpm = acceptedAvgBpm
+        )
+
+        logger.info {
+            "Stats persisted for user $userId: " +
+            "xpDelta=$acceptedXp, sessionsDelta=${if (acceptedBlockDtos.isNotEmpty()) 1 else 0}, " +
+            "blocksDelta=${acceptedBlockDtos.size}, duration=$acceptedDuration"
+        }
+
+        // v1.0.5: Stats oficiales para la respuesta
         val officialStats = OfficialStatsDto(
             officialTotalXp = balanceAfter.toLong(),
             officialTotalSessions = request.clientStats.totalSessions,
             officialTotalBlocks = acceptedBlocks.size,
-            officialTotalDurationSeconds = request.blocks
-                .filter { it.blockId in acceptedBlocks }
-                .sumOf { it.durationSeconds.toLong() },
+            officialTotalDurationSeconds = acceptedDuration,
             officialAvgBpmAllTime = request.clientStats.avgBpmAllTime,
             correctionApplied = rejectedBlocks.isNotEmpty(),
             correctionReason = if (rejectedBlocks.isNotEmpty()) 
@@ -134,16 +158,10 @@ class SyncBatchService(
         )
     }
 
-    // ... resto de métodos sin cambios (persistOrUpdateSession, processSingleBlock, BlockResult)
-    
-    // En processSingleBlock, actualizar xpDetail con rankChanged real:
-    // (solo cambia el constructor de XpAwardedResponseDto en cada return)
-    
     /**
      * Persiste la ExerciseSession del batch...
      */
     private fun persistOrUpdateSession(request: SyncBatchRequestDto, userId: UUID) {
-        // ... mismo código que tienes ahora ...
         if (request.blocks.isEmpty()) return
 
         val firstBlock = request.blocks.first()

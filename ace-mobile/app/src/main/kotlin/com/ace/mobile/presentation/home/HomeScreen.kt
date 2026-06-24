@@ -102,10 +102,18 @@ fun HomeScreen(
                 onClick = { navController.navigate("ranking_screen_route") }
             )
 
+            // ← NUEVO Hito 4: Estadísticas
+            HomeActionCard(
+                title = "Estadísticas",
+                subtitle = "Progreso, historial y logros",
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                onClick = { navController.navigate("stats_screen_route") }
+            )
+
             HomeActionCard(
                 title = "Mi Perfil",
-                subtitle = "Estadísticas y configuración",
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                subtitle = "Configuración y cuenta",
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
                 onClick = { navController.navigate("profile_screen_route") }
             )
 
@@ -194,6 +202,7 @@ private fun HomeActionCard(
                 text = when (title) {
                     "Iniciar Ejercicio" -> "💪"
                     "Ranking" -> "🏆"
+                    "Estadísticas" -> "📊"
                     "Mi Perfil" -> "👤"
                     else -> "•"
                 },

@@ -30,6 +30,10 @@ class AuthRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()!!
                 val expiresAt = System.currentTimeMillis() + (body.expiresIn * 1000L)
+                // FIX: Limpiar cualquier usuario anterior del dispositivo antes de insertar.
+                // Sin esto, cada login con un userId distinto añade una fila nueva a
+                // local_user y getCurrentUser() podía devolver la equivocada.
+                userDao.clearUser()
                 userDao.insert(
                     LocalUserEntity(
                         userId = body.userId,
@@ -62,6 +66,8 @@ class AuthRepository @Inject constructor(
             if (response.isSuccessful) {
                 val body = response.body()!!
                 val expiresAt = System.currentTimeMillis() + (body.expiresIn * 1000L)
+                // FIX: Limpiar cualquier usuario anterior del dispositivo antes de insertar.
+                userDao.clearUser()
                 userDao.insert(
                     LocalUserEntity(
                         userId = body.userId,
@@ -94,9 +100,11 @@ class AuthRepository @Inject constructor(
                     }
                 }
 
-                // 2. Limpieza lógica local (S4 §3.3)
-                // Se anulan los tokens pero permanece la entidad con su deviceId intacto.
-                userDao.clearTokens(currentUser.userId)
+                // 2. Limpieza local: eliminamos la fila del usuario.
+                // FIX: Antes se usaba clearTokens() que solo anulaba accessToken/refreshToken
+                // pero mantenía la fila viva, lo que provocaba sesiones residuales y userIds
+                // stale. Ahora clearUser() elimina la fila por completo.
+                userDao.clearUser()
             }
             Result.success(Unit)
         } catch (e: Exception) {

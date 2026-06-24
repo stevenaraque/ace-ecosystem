@@ -81,7 +81,12 @@ class AuthInterceptor @Inject constructor(
         return try {
             val bodyString = response.peekBody(Long.MAX_VALUE).string()
             val errorObj = gson.fromJson(bodyString, JsonObject::class.java)
-            errorObj.get("error")?.asString == "TOKEN_EXPIRED"
+            val error = errorObj.get("error")?.asString
+            // FIX: El backend devuelve {"error":"INVALID_TOKEN"} cuando el token está
+            // expirado (la rama TOKEN_EXPIRED del JwtAuthenticationFilter es inalcanzable
+            // porque validateAccessToken captura ExpiredJwtException y devuelve null).
+            // Aceptamos ambos códigos para que el refresh se dispare en cualquier caso.
+            error == "TOKEN_EXPIRED" || error == "INVALID_TOKEN"
         } catch (_: Exception) {
             false
         }

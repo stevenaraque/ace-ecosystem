@@ -125,4 +125,16 @@ object NetworkModule {
         return retrofit.create(com.ace.mobile.data.remote.api.RankingApi::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideStatsApi(retrofit: Retrofit): StatsApi {
+        return retrofit.create(StatsApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideHistoryApi(retrofit: Retrofit): HistoryApi {
+        return retrofit.create(HistoryApi::class.java)
+    }
+
 }

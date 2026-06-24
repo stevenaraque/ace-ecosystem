@@ -49,5 +49,17 @@ object DatabaseModule {
     @Singleton
     fun provideRankingCacheDao(database: AceDatabase): RankingCacheDao = database.rankingCacheDao()
 
+    @Provides
+    @Singleton
+    fun provideStatsDao(database: AceDatabase): StatsDao {
+        return database.statsDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSessionHistoryDao(database: AceDatabase): SessionHistoryDao {
+        return database.sessionHistoryDao()
+    }
+
 
 }
