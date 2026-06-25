@@ -72,6 +72,8 @@ dependencies {
     implementation(libs.ui.graphics)
     implementation(libs.ui.tooling.preview)
     debugImplementation(libs.ui.tooling)
+    implementation(libs.compose.material.icons)
+    implementation(libs.compose.material.icons.extended)
 
     // Wear Compose
     implementation(libs.wear.compose.foundation)
