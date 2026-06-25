@@ -1,4 +1,3 @@
-// ace-wear/app/src/main/kotlin/com/ace/wear/presentation/components/AceLogo.kt
 package com.ace.wear.presentation.components
 
 import androidx.compose.foundation.Canvas
@@ -24,21 +23,31 @@ fun AceLogo(
         val width = size.toPx()
         val height = size.toPx()
 
+        // FACTOR DE ESCALA DINÁMICO:
+        // Relaciona el tamaño actual con el tamaño base original (80.dp).
+        // Esto evita el colapso visual (masa) cuando el tamaño disminuye.
+        val scale = width / 80.dp.toPx()
+
+        // Ajuste proporcional de grosores en pixeles
+        val strokeCircle1 = 2.dp.toPx() * scale
+        val strokeCircle2 = 4.dp.toPx() * scale
+        val strokePulse = 6.dp.toPx() * scale
+        val strokeBar = 4.dp.toPx() * scale
+
         // 1. Círculo exterior (brillo sutil + línea principal)
         drawCircle(
             color = logoColor.copy(alpha = 0.15f),
             radius = width / 2f,
-            style = Stroke(width = 2.dp.toPx())
+            style = Stroke(width = strokeCircle1)
         )
 
         drawCircle(
             color = logoColor,
             radius = width / 2f,
-            style = Stroke(width = 4.dp.toPx())
+            style = Stroke(width = strokeCircle2)
         )
 
-        // 2. Pulso EKG que forma la "A"
-        val strokeWidthPx = 6.dp.toPx()
+        // 2. Pulso EKG que forma la "A" (Con grosor autoadaptable)
         val path = Path().apply {
             moveTo(width * 0.20f, height * 0.55f)
             lineTo(width * 0.32f, height * 0.55f)
@@ -53,13 +62,13 @@ fun AceLogo(
             path = path,
             color = Color.White,
             style = Stroke(
-                width = strokeWidthPx,
+                width = strokePulse,
                 cap = StrokeCap.Round,
                 join = StrokeJoin.Round
             )
         )
 
-        // 3. Barra horizontal de la "A"
+        // 3. Barra horizontal de la "A" (Con grosor autoadaptable)
         val barPath = Path().apply {
             moveTo(width * 0.43f, height * 0.50f)
             lineTo(width * 0.57f, height * 0.50f)
@@ -69,7 +78,7 @@ fun AceLogo(
             path = barPath,
             color = logoColor,
             style = Stroke(
-                width = 4.dp.toPx(),
+                width = strokeBar,
                 cap = StrokeCap.Round
             )
         )

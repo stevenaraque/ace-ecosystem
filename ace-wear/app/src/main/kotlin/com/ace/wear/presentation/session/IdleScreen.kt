@@ -1,24 +1,27 @@
-// ace-wear/app/src/main/kotlin/com/ace/wear/presentation/session/IdleScreen.kt
 package com.ace.wear.presentation.session
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
-import com.ace.wear.presentation.components.AceLogo
 import com.ace.wear.presentation.components.AceRingBackground
-import com.ace.wear.presentation.components.ConnectionStatusChip
-import com.ace.wear.presentation.theme.AceRed
-import com.ace.wear.presentation.theme.AceTextSecondary
-import com.ace.wear.presentation.theme.UnifrakturMaguntia
+import com.ace.wear.presentation.theme.*
 
 /**
- * Pantalla de reposo. Sin sesion activa, esperando START del movil.
+ * Pantalla de reposo - Versión de Pruebas de Estado y Permisos.
+ * Mantiene el centro geométrico bloqueado sin usar el componente de logo.
  */
 @Composable
 fun IdleScreen(
@@ -28,71 +31,147 @@ fun IdleScreen(
     hasSensorPermission: Boolean,
     permissionDenied: Boolean
 ) {
+    // Animación sincronizada para los efectos neón
+    val infiniteTransition = rememberInfiniteTransition(label = "idleLayout")
+    val neonAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "synchronizedNeonPulse"
+    )
+
+    // Rojo brillante de alta saturación
+    val SaturatedNeonRed = Color(0xFFFF0018)
+
+    // 1. LÓGICA DE CONEXIÓN: Integra el estado ("Conectado"/"Buscando") junto a los Nodos
+    val connectionText: String
+    val connectionColor: Color
+
+    when {
+        isConnected && nodeCount > 0 -> {
+            connectionColor = AceGreen
+            connectionText = "Conectado ($nodeCount Nodos)"
+        }
+        !isConnected && lastError != null -> {
+            connectionColor = SaturatedNeonRed
+            connectionText = "Error"
+        }
+        else -> {
+            connectionColor = AceOrange
+            connectionText = "Buscando ($nodeCount Nodos)"
+        }
+    }
+
+    // 2. LÓGICA OPERACIONAL CORREGIDA: Permite evaluar fallos de permisos en paralelo a la conexión
+    val operationalText: String
+    val operationalColor: Color
+
+    when {
+        permissionDenied -> {
+            // Forzado: Se muestra inmediatamente si falta el permiso, ignorando el estado de red
+            operationalText = "Permiso denegado"
+            operationalColor = SaturatedNeonRed
+        }
+        !hasSensorPermission -> {
+            operationalText = "Permiso requerido"
+            operationalColor = AceTextSecondary
+        }
+        else -> {
+            operationalText = "Esperando START"
+            operationalColor = Color.White.copy(alpha = 0.65f)
+        }
+    }
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        // Fondo: anillos estaticos
-        AceRingBackground(animated = false)
+        // Fondo estático de anillos góticos
+        AceRingBackground(
+            modifier = Modifier.fillMaxSize(),
+            animated = false,
+            showCenterDot = false
+        )
 
-        // Contenido
+        // ESTRUCTURA SIMÉTRICA DE CONTROL DE EJES
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Chip de conexion (arriba)
-            ConnectionStatusChip(
-                isConnected = isConnected,
-                nodeCount = nodeCount,
-                lastError = lastError
-            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // MITAD SUPERIOR: Controla la zona de Conexión + Nodos
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(bottom = 8.dp) // Separación limpia del título
+                ) {
+                    Text(
+                        text = "●",
+                        fontSize = 5.sp,
+                        color = connectionColor,
+                        textAlign = TextAlign.Center
+                    )
 
-            // Logo A.C.E centrado
-            AceLogo(size = 70.dp)
+                    Spacer(modifier = Modifier.width(4.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = connectionText.uppercase(),
+                        fontFamily = CinzelDecorative,
+                        fontSize = 7.sp, // Tamaño compacto ideal para textos compuestos con variables
+                        color = Color.White,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = connectionColor.copy(alpha = neonAlpha),
+                                offset = Offset(0f, 0f),
+                                blurRadius = 6f
+                            )
+                        ),
+                        textAlign = TextAlign.Center,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
 
-            // Texto "A.C.E"
+            // ── EL CENTRO GEOMÉTRICO ABSOLUTO (X, Y) ──
             Text(
-                text = "A.C.E",
-                fontFamily = UnifrakturMaguntia,
-                fontSize = 16.sp,
-                color = AceRed,
-                textAlign = TextAlign.Center
+                text = "A.C.E WEAR",
+                fontFamily = CinzelDecorative,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                color = Color.White,
+                style = TextStyle(
+                    shadow = Shadow(
+                        color = SaturatedNeonRed.copy(alpha = neonAlpha),
+                        offset = Offset(0f, 0f),
+                        blurRadius = 15f
+                    )
+                ),
+                textAlign = TextAlign.Center,
+                letterSpacing = 2.5.sp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Estado de permiso o mensaje de espera
-            when {
-                permissionDenied && !isConnected -> {
-                    Text(
-                        text = "Permiso denegado",
-                        style = MaterialTheme.typography.caption2,
-                        color = MaterialTheme.colors.error,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                !hasSensorPermission -> {
-                    Text(
-                        text = "Permiso requerido",
-                        style = MaterialTheme.typography.caption2,
-                        color = AceTextSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-                else -> {
-                    Text(
-                        text = "Esperando START...",
-                        fontFamily = UnifrakturMaguntia,
-                        fontSize = 12.sp,
-                        color = AceTextSecondary,
-                        textAlign = TextAlign.Center
-                    )
-                }
+            // MITAD INFERIOR: Controla la acción actual o alertas de permisos
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Text(
+                    text = operationalText.uppercase(),
+                    fontFamily = CinzelDecorative,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 8.sp,
+                    color = operationalColor,
+                    textAlign = TextAlign.Center,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.padding(top = 8.dp) // Separación limpia debajo del título
+                )
             }
         }
     }
