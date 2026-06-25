@@ -22,7 +22,7 @@ junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 mockk = "1.13.12"
 truth = "1.4.4"
-ace-shared = "1.0.7"
+ace-shared = "1.0.9"
 
 [libraries]
 # === Kotlin & Corrutinas ===

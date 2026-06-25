@@ -12,15 +12,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.ace.mobile.presentation.auth.LoginScreen
-import com.ace.mobile.presentation.exercise.SessionScreen
-import com.ace.mobile.presentation.history.HistoryScreen
-import com.ace.mobile.presentation.home.HomeScreen
-import com.ace.mobile.presentation.profile.ProfileScreen
-import com.ace.mobile.presentation.profile.ProfileViewModel
-import com.ace.mobile.presentation.ranking.RankingScreen
-import com.ace.mobile.presentation.stats.StatsScreen
-import com.ace.mobile.data.local.database.dao.UserDao
+import com.ace.mobile.feature.auth.presentation.LoginScreen
+import com.ace.mobile.feature.auth.presentation.RegisterScreen
+import com.ace.mobile.feature.exercise.presentation.SessionScreen
+import com.ace.mobile.feature.history.presentation.HistoryScreen
+
+import com.ace.mobile.feature.profile.presentation.ProfileScreen
+import com.ace.mobile.feature.profile.presentation.ProfileViewModel
+import com.ace.mobile.feature.ranking.presentation.RankingScreen
+import com.ace.mobile.feature.stats.presentation.StatsScreen
+import com.ace.mobile.core.database.dao.UserDao
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import androidx.compose.runtime.collectAsState
@@ -56,6 +57,22 @@ class MainActivity : ComponentActivity() {
                                 navController.navigate("home_screen_route") {
                                     popUpTo("login_screen_route") { inclusive = true }
                                 }
+                            },
+                            onNavigateToRegister = {
+                                navController.navigate("register_screen_route")
+                            }
+                        )
+                    }
+
+                    composable("register_screen_route") {
+                        RegisterScreen(
+                            onRegisterSuccess = {
+                                navController.navigate("home_screen_route") {
+                                    popUpTo("login_screen_route") { inclusive = true }
+                                }
+                            },
+                            onNavigateToLogin = {
+                                navController.popBackStack()
                             }
                         )
                     }

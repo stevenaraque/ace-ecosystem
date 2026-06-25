@@ -1,0 +1,29 @@
+// app/src/main/kotlin/com/ace/mobile/di/RepositoryModule.kt
+package com.ace.mobile.core.di
+
+import com.ace.mobile.core.data.SessionRepository
+import com.ace.mobile.core.data.SessionRepositoryImpl
+import com.ace.mobile.core.data.SessionSampleBuffer
+import com.ace.mobile.core.data.SessionSampleBufferImpl
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+
+    @Binds
+    abstract fun bindSessionRepository(
+        impl: SessionRepositoryImpl
+    ): SessionRepository
+
+    @Binds
+    abstract fun bindSessionSampleBuffer(
+        impl: SessionSampleBufferImpl
+    ): SessionSampleBuffer
+
+    // ← NO agregar binds para StatsRepository ni HistoryRepository
+    // Ya tienen @Inject constructor, Hilt los inyecta directamente
+}
