@@ -24,30 +24,13 @@ fun AceLogo(
         val height = size.toPx()
 
         // FACTOR DE ESCALA DINÁMICO:
-        // Relaciona el tamaño actual con el tamaño base original (80.dp).
-        // Esto evita el colapso visual (masa) cuando el tamaño disminuye.
+        // Mantiene la proporción perfecta del grosor de las líneas sin importar el tamaño del logo
         val scale = width / 80.dp.toPx()
 
-        // Ajuste proporcional de grosores en pixeles
-        val strokeCircle1 = 2.dp.toPx() * scale
-        val strokeCircle2 = 4.dp.toPx() * scale
         val strokePulse = 6.dp.toPx() * scale
         val strokeBar = 4.dp.toPx() * scale
 
-        // 1. Círculo exterior (brillo sutil + línea principal)
-        drawCircle(
-            color = logoColor.copy(alpha = 0.15f),
-            radius = width / 2f,
-            style = Stroke(width = strokeCircle1)
-        )
-
-        drawCircle(
-            color = logoColor,
-            radius = width / 2f,
-            style = Stroke(width = strokeCircle2)
-        )
-
-        // 2. Pulso EKG que forma la "A" (Con grosor autoadaptable)
+        // 1. Pulso EKG que forma la "A" (Línea blanca principal)
         val path = Path().apply {
             moveTo(width * 0.20f, height * 0.55f)
             lineTo(width * 0.32f, height * 0.55f)
@@ -68,7 +51,7 @@ fun AceLogo(
             )
         )
 
-        // 3. Barra horizontal de la "A" (Con grosor autoadaptable)
+        // 2. Barra horizontal de la "A" (Línea de color de la marca)
         val barPath = Path().apply {
             moveTo(width * 0.43f, height * 0.50f)
             lineTo(width * 0.57f, height * 0.50f)

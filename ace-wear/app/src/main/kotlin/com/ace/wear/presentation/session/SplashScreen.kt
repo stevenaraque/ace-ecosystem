@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,46 +45,52 @@ fun SplashScreen() {
             showCenterDot = false
         )
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .align(Alignment.Center)
+                .graphicsLayer(alpha = 0.14f)
         ) {
+            AceLogo(size = 110.dp)
+        }
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+
             Text(
                 text = "A.C.E WEAR",
                 fontFamily = CinzelDecorative,
                 fontWeight = FontWeight.Bold,
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 color = Color.White,
                 style = TextStyle(
                     shadow = Shadow(
                         color = AceRed.copy(alpha = neonAlpha),
                         offset = Offset(0f, 0f),
-                        blurRadius = 12f
+                        blurRadius = 15f
                     )
                 ),
                 textAlign = TextAlign.Center,
-                letterSpacing = 3.sp
+                letterSpacing = 2.5.sp
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = "ACTIVE CARDIAC EFFORT",
-                fontFamily = CinzelDecorative,
-                fontWeight = FontWeight.Normal,
-                fontSize = 8.sp,
-                color = Color.White.copy(alpha = 0.5f),
-                textAlign = TextAlign.Center,
-                letterSpacing = 1.5.sp
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // AJUSTE: Subimos de 28.dp a 36.dp para mejorar la definición del icono
-            AceLogo(size = 36.dp)
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Text(
+                    text = "ACTIVE CARDIAC EFFORT",
+                    fontFamily = CinzelDecorative,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 8.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                    letterSpacing = 1.5.sp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }

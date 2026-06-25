@@ -1,9 +1,7 @@
 package com.ace.wear.presentation.session
 
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -69,13 +67,23 @@ fun ActiveSessionScreen(
             showCenterDot = false
         )
 
+        Text(
+            text = "A.C.E WEAR",
+            fontFamily = CinzelDecorative,
+            fontWeight = FontWeight.Bold,
+            fontSize = 22.sp,
+            color = Color.White.copy(alpha = 0.18f),
+            textAlign = TextAlign.Center,
+            letterSpacing = 2.5.sp,
+            modifier = Modifier.align(Alignment.Center)
+        )
+
         Button(
             onClick = onStopClicked,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .padding(start = 52.dp)
-                .size(38.dp)
-                .border(1.dp, saturatedNeonRed.copy(alpha = 0.35f), CircleShape),
+                .size(38.dp),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = Color.Transparent
             )
@@ -148,22 +156,20 @@ fun ActiveSessionScreen(
         }
 
         val pauseIconColor = if (isPaused) Color(0xFF00C853) else Color.White.copy(alpha = 0.85f)
-        val pauseBorderColor = if (isPaused) Color(0xFF00C853).copy(alpha = 0.4f) else Color.White.copy(alpha = 0.2f)
 
         Button(
             onClick = onPauseClicked,
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 52.dp)
-                .size(38.dp)
-                .border(1.dp, pauseBorderColor, CircleShape),
+                .size(38.dp),
             colors = ButtonDefaults.buttonColors(
                 backgroundColor = Color.Transparent
             )
         ) {
             Icon(
                 imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                contentDescription = if (isPaused) "Resume" else "Pause",
+                contentDescription = "Resume",
                 tint = pauseIconColor,
                 modifier = Modifier.size(18.dp)
             )
