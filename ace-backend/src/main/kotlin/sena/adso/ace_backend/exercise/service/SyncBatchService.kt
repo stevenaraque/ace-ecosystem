@@ -26,7 +26,7 @@ class SyncBatchService(
     private val streakEvaluationService: StreakEvaluationService,
     private val sessionRepository: SessionRepository,
     private val rankEvaluator: RankEvaluator,
-    private val statsPersistenceService: StatsPersistenceService  // ← NUEVO Hito 4
+    private val statsPersistenceService: StatsPersistenceService
 ) {
 
     @Transactional
@@ -39,12 +39,10 @@ class SyncBatchService(
             "sentAt=${request.sentAt}"
         }
 
-        // ─── Calcular rango ANTES de procesar bloques ───
         val balanceBefore = xpTransactionService.getCurrentBalance(userId)
-        val rankBefore = rankEvaluator.evaluateRank(userId, balanceBefore.toLong())
+        val rankBefore = rankEvaluator.evaluateRank(userId, balanceBefore)
         logger.debug { "User $userId rank before: ${rankBefore.rankName} (xp=$balanceBefore)" }
 
-        // ─── Persistir/actualizar ExerciseSession ───
         persistOrUpdateSession(request, userId)
 
         val acceptedBlocks = mutableListOf<String>()
@@ -72,17 +70,19 @@ class SyncBatchService(
             }
         }
 
-        // ─── Calcular rango DESPUÉS de procesar bloques ───
         val balanceAfter = xpTransactionService.getCurrentBalance(userId)
-        val rankAfter = rankEvaluator.evaluateRank(userId, balanceAfter.toLong())
+        val rankAfter = rankEvaluator.evaluateRank(userId, balanceAfter)
         val rankChanged = rankBefore.rankId != rankAfter.rankId
         
         if (rankChanged) {
             logger.info { "User $userId RANK UP! ${rankBefore.rankName} → ${rankAfter.rankName}" }
         }
 
-        // v1.0.5: Evaluar racha con el último bloque aceptado
-        val lastAcceptedBlock = request.blocks.find { it.blockId in acceptedBlocks }
+        // C5 FIX: usar el último bloque aceptado (más reciente por timestamp), no el primero
+        val lastAcceptedBlock = request.blocks
+            .filter { it.blockId in acceptedBlocks }
+            .maxByOrNull { it.timestampStart }
+
         val streakState = if (lastAcceptedBlock != null) {
             streakEvaluationService.evaluateStreak(
                 userId,
@@ -103,7 +103,6 @@ class SyncBatchService(
             )
         }
 
-        // ─── v1.0.5: Persistir stats oficiales en user_stats ───
         val acceptedBlockDtos = request.blocks.filter { it.blockId in acceptedBlocks }
         val acceptedDuration = acceptedBlockDtos.sumOf { it.durationSeconds.toLong() }
         val acceptedXp = acceptedBlockDtos.sumOf { it.xpCalculated.toLong() }
@@ -127,9 +126,8 @@ class SyncBatchService(
             "blocksDelta=${acceptedBlockDtos.size}, duration=$acceptedDuration"
         }
 
-        // v1.0.5: Stats oficiales para la respuesta
         val officialStats = OfficialStatsDto(
-            officialTotalXp = balanceAfter.toLong(),
+            officialTotalXp = balanceAfter,
             officialTotalSessions = request.clientStats.totalSessions,
             officialTotalBlocks = acceptedBlocks.size,
             officialTotalDurationSeconds = acceptedDuration,
@@ -158,9 +156,6 @@ class SyncBatchService(
         )
     }
 
-    /**
-     * Persiste la ExerciseSession del batch...
-     */
     private fun persistOrUpdateSession(request: SyncBatchRequestDto, userId: UUID) {
         if (request.blocks.isEmpty()) return
 
@@ -216,7 +211,6 @@ class SyncBatchService(
         userId: UUID
     ): BlockResult {
         
-        // Paso 1: Validación de sanidad (S5)
         val validationResult = xpSanityValidator.validate(dto)
         
         if (validationResult is XpSanityValidator.ValidationResult.Invalid) {
@@ -230,10 +224,10 @@ class SyncBatchService(
                     blockId = dto.blockId,
                     xpAccepted = 0,
                     xpRejected = dto.xpCalculated,
-                    newTotalXp = currentBalance.toLong(),
+                    newTotalXp = currentBalance,
                     rankChanged = false,
                     newRankId = null,
-                    balanceAfter = currentBalance.toLong(),
+                    balanceAfter = currentBalance,
                     schemaVersion = SyncConstants.CURRENT_SCHEMA_VERSION
                 ),
                 rejectionReason = validationResult.reason,
@@ -241,7 +235,6 @@ class SyncBatchService(
             )
         }
 
-        // Paso 2: Idempotencia + Persistencia del bloque (S3)
         val wasPersisted = blockPersistenceService.persistIfNotExists(dto)
         
         if (!wasPersisted) {
@@ -253,16 +246,15 @@ class SyncBatchService(
                     blockId = dto.blockId,
                     xpAccepted = 0,
                     xpRejected = 0,
-                    newTotalXp = currentBalance.toLong(),
+                    newTotalXp = currentBalance,
                     rankChanged = false,
                     newRankId = null,
-                    balanceAfter = currentBalance.toLong(),
+                    balanceAfter = currentBalance,
                     schemaVersion = SyncConstants.CURRENT_SCHEMA_VERSION
                 )
             )
         }
 
-        // Paso 3: Registrar transacción XP (S5)
         val transaction = xpTransactionService.recordXpTransaction(userId, dto)
         
         return BlockResult(
@@ -271,10 +263,10 @@ class SyncBatchService(
                 blockId = dto.blockId,
                 xpAccepted = dto.xpCalculated,
                 xpRejected = 0,
-                newTotalXp = transaction.balanceAfter.toLong(),
-                rankChanged = false, // Se calcula a nivel de batch, no por bloque
+                newTotalXp = transaction.balanceAfter,
+                rankChanged = false,
                 newRankId = null,
-                balanceAfter = transaction.balanceAfter.toLong(),
+                balanceAfter = transaction.balanceAfter,
                 schemaVersion = SyncConstants.CURRENT_SCHEMA_VERSION
             )
         )

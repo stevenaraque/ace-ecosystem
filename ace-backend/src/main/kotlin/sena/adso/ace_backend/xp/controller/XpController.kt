@@ -1,5 +1,6 @@
 package sena.adso.ace_backend.xp.controller
 
+import com.ace.shared.constants.XpConstants
 import com.ace.shared.dto.XpFormulaDto
 import mu.KotlinLogging
 import org.springframework.http.ResponseEntity
@@ -16,14 +17,13 @@ class XpController(
     private val formulaService: FormulaService
 ) {
 
-    /**
-     * GET /api/xp/formulas
-     * Retorna todas las fórmulas XP activas para que el mobile las cachee.
-     */
     @GetMapping("/formulas")
     fun getActiveFormulas(): ResponseEntity<List<XpFormulaDto>> {
         logger.info { "Fetching active XP formulas" }
-        val formulas = formulaService.getActiveFormulas()
-        return ResponseEntity.ok(formulas)
+        val (formulas, maxVersion) = formulaService.getActiveFormulas()
+
+        return ResponseEntity.ok()
+            .header(XpConstants.FORMULA_VERSION_HEADER, maxVersion.toString())
+            .body(formulas)
     }
 }

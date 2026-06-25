@@ -29,10 +29,13 @@ class AuthService(
             throw IllegalArgumentException("Invalid credentials")
         }
 
-        // deviceId puede ser null en AuthRequestDto — usamos fallback
         val deviceId = request.deviceId ?: throw IllegalArgumentException("Device ID required")
 
-        val accessToken = jwtService.generateAccessToken(user.id!!, deviceId)
+        // F7: Revocar todos los refresh tokens previos del usuario (JWT único por dispositivo)
+        refreshTokenService.revokeAllUserTokens(user.id!!)
+        logger.info { "Revoked all previous tokens for user ${user.id} on new login from device $deviceId" }
+
+        val accessToken = jwtService.generateAccessToken(user.id, deviceId)
         val refreshToken = refreshTokenService.createRefreshToken(user.id, deviceId)
 
         logger.info { "User logged in: ${user.email}, device: $deviceId" }
@@ -40,7 +43,7 @@ class AuthService(
         return AuthResponseDto(
             accessToken = accessToken,
             refreshToken = refreshToken,
-            expiresIn = (AuthConstants.ACCESS_TOKEN_TTL_MINUTES * 60).toLong(), // Long, no Int
+            expiresIn = (AuthConstants.ACCESS_TOKEN_TTL_MINUTES * 60).toLong(),
             userId = user.id.toString(),
             email = user.email
         )
@@ -61,7 +64,10 @@ class AuthService(
         )
         val savedUser = userRepository.save(user)
 
-        val accessToken = jwtService.generateAccessToken(savedUser.id!!, deviceId)
+        // F7: Revocar tokens previos (defensivo, aunque usuario nuevo no debería tener)
+        refreshTokenService.revokeAllUserTokens(savedUser.id!!)
+
+        val accessToken = jwtService.generateAccessToken(savedUser.id, deviceId)
         val refreshToken = refreshTokenService.createRefreshToken(savedUser.id, deviceId)
 
         logger.info { "User registered: ${savedUser.email}" }

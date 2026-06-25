@@ -13,19 +13,19 @@ data class UserProfile(
     val userId: UUID,
 
     @Column
-    val username: String? = null,
+    var username: String? = null,
 
     @Column
-    val nickname: String? = null,
+    var nickname: String? = null,
 
     @Column
-    val cityId: String? = null,
+    var cityId: String? = null,
 
     @Column(name = "weight_kg")
-    val weightKg: java.math.BigDecimal? = null,
+    var weightKg: java.math.BigDecimal? = null,
 
     @Column(name = "birth_date")
-    val birthDate: LocalDate? = null,
+    var birthDate: LocalDate? = null,
 
     @Column(nullable = false, updatable = false)
     val createdAt: Instant = Instant.now(),

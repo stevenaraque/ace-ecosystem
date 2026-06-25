@@ -16,10 +16,6 @@ class XpTransactionService(
     private val xpTransactionRepository: XpTransactionRepository
 ) {
 
-    /**
-     * Registra una transacción XP append-only.
-     * Retorna la transacción creada con el balance actualizado.
-     */
     @Transactional
     fun recordXpTransaction(userId: UUID, block: ExerciseBlockDto): XpTransaction {
         val currentBalance = getCurrentBalance(userId)
@@ -52,10 +48,10 @@ class XpTransactionService(
      * Obtiene el balance actual de XP de un usuario.
      * Si no hay transacciones, retorna 0.
      */
-    fun getCurrentBalance(userId: UUID): Int {
+    fun getCurrentBalance(userId: UUID): Long {
         val lastTransaction = xpTransactionRepository
             .findTopByUserIdOrderByCreatedAtDesc(userId)
 
-        return lastTransaction?.balanceAfter ?: 0
+        return lastTransaction?.balanceAfter ?: 0L
     }
 }

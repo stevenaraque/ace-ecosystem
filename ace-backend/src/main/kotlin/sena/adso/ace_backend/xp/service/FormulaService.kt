@@ -12,17 +12,22 @@ class FormulaService(
     private val xpFormulaRepository: XpFormulaRepository
 ) {
 
-    fun getActiveFormulas(): List<XpFormulaDto> {
-        return xpFormulaRepository.findAll()
+    fun getActiveFormulas(): Pair<List<XpFormulaDto>, Int> {
+        val formulas = xpFormulaRepository.findAll()
             .filter { it.isActive }
-            .map { formula ->
-                XpFormulaDto(
-                    sportType = formula.sportType,
-                    minBpm = formula.minBpm.toInt(),
-                    xpPerMinute = formula.xpPerMinute.toInt(),
-                    maxXpPerBlock = formula.maxXpPerBlock,
-                    version = 1
-                )
-            }
+
+        val maxVersion = formulas.maxOfOrNull { it.version.toInt() } ?: 1
+
+        val dtos = formulas.map { formula ->
+            XpFormulaDto(
+                sportType = formula.sportType,
+                minBpm = formula.minBpm.toInt(),
+                xpPerMinute = formula.xpPerMinute.toInt(),
+                maxXpPerBlock = formula.maxXpPerBlock,
+                version = formula.version
+            )
+        }
+
+        return dtos to maxVersion
     }
 }

@@ -10,33 +10,33 @@ import java.util.UUID
 data class XpTransaction(
     @Id
     @Column(nullable = false, updatable = false)
-    val transactionId: UUID,
+    val transactionId: UUID = UUID.randomUUID(),
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     val userId: UUID,
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     val blockId: UUID,
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     val sessionId: UUID,
 
-    @Column(nullable = false)
+    @Column(name = "xp_amount", nullable = false)
     val xpAmount: Int,
 
-    @Column(nullable = false)
-    val balanceAfter: Int,
+    @Column(name = "balance_after", nullable = false)
+    val balanceAfter: Long,
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     val sportType: SportType,
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     val durationSeconds: Int,
 
-    @Column(nullable = false, updatable = false)
+    @Column(nullable = false)
     val avgBpm: Double,
 
     @Column(nullable = false, updatable = false)
-    val createdAt: Instant
+    val createdAt: Instant = Instant.now()
 )

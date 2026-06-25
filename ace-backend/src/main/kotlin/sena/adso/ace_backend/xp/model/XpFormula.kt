@@ -23,13 +23,13 @@ data class XpFormula(
     val xpPerMinute: Double,
 
     @Column(nullable = false)
-    val bonusMultiplier: Double,
-
-    @Column(nullable = false)
     val maxXpPerBlock: Int,
 
     @Column(nullable = false)
     val isActive: Boolean = true,
+
+    @Column(nullable = false)
+    val version: Int = 1,  // ← AÑADIDO para M4
 
     @Column(nullable = false, updatable = false)
     val createdAt: Instant = Instant.now()
