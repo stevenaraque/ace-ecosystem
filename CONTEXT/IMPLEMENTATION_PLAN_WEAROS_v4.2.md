@@ -1,11 +1,13 @@
 # A.C.E — Implementation Plan: Wear OS (`ace-wear`)
 
-> **Estado:** ✅ En desarrollo activo (Steven)  
-> **Versión:** 4.4 (Arquitectura Clean, `:shared` híbrido: se consumen enums pero NO data classes)  
-> **Fecha:** 2026-06-19  
-> **Stack:** Wear OS 3+ (API 30+) · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Health Services Client 1.0.0 · Wear OS Data Layer API · Jetpack Compose for Wear OS 1.6.2 · Hilt 2.59.2  
-> **`:shared` (Híbrido):** Se consume para enums pero se mantienen mapeos manuales o no se usa DTOs complejos para evitar inflar el APK.  
+> **Estado:** ✅ HU-06 completada (~100% del alcance del reloj). Captura + transmisión + UI consolidadas.
+> **Versión:** 4.5 (UI y captura completas; arquitectura Clean consolidada; `:shared` híbrido confirmado)
+> **Fecha:** 2026-06-25
+> **Stack:** Wear OS 3+ (API 30+) · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Health Services Client 1.0.0 · Wear OS Data Layer API · Jetpack Compose for Wear OS 1.6.2 · Hilt 2.59.2
+> **`:shared` (Híbrido):** Se consume para enums/constantes pero NO DTOs, para mantener el APK ligero.
 > **Responsable:** Steven Araque (Mobile/Wear Lead)
+>
+> **v4.4 → v4.5 (2026-06-25):** Auditoría de código. HU-06 (captura de FC) marcada como completada: UI splash/idle/active, componentes (`HeartRateDisplay`, `TimerDisplay`, `StopButton`, `ConnectionStatusChip`, `AceLogo`, `AceRingBackground`, `DiagLogPanel`), use cases vivos (`Start/StopExerciseUseCase`), registro único de `MessageClient` en `WearApplication`. El reloj cumple su rol "tonto por diseño".
 
 ---
 
@@ -16,6 +18,7 @@
 | v4.1 → v4.2 | Estructura `data/`, DI modules, nombres de wrappers/usecases, UI state, repository, componentes, foreground service | Ver detalle en la versión anterior del doc | Más semántico, separación de responsabilidades (health vs. sync). |
 | **v4.2 → v4.3** | **`:shared` en wear** | ❌ **Revertido: wear NO consume `:shared`.** Se eliminó la dependencia JitPack (`ace-shared:1.0.3`) y el `import com.ace.shared.*`. Los paths se definen como strings literales locales (`WearDataLayerPaths` en `WearDataClient.kt`). | **El consumo de `:shared` en v4.2 fue un error.** Contradice la arquitectura oficial (Arquitectura v0.3 §1, §16: *"Wear OS: NO `:shared`, NO Room"*) y el principio de "el reloj es tonto por diseño". Los paths se mantienen alineados manualmente con `DataLayerPaths` de `:shared`. |
 | **v4.3 → v4.4** | **Arquitectura Clean y `:shared` Híbrido** | Implementación de Arquitectura Clean y uso selectivo (híbrido) de `:shared`. | Mejora mantenibilidad; consumo parcial evita peso innecesario. |
+| **v4.4 → v4.5** | **HU-06 completada** | UI (splash/idle/active + componentes), captura Health Services y arquitectura Clean consolidadas; registro único de `MessageClient` en `WearApplication`. | El reloj cumple su rol "tonto por diseño". |
 
 > ⚠️ **Cambio de decisión v4.3 → v4.4:** Se adopta Arquitectura Clean estructurada y consumo "híbrido" de `:shared` (solo constantes/enums, sin DTOs).
 
@@ -255,29 +258,29 @@ sealed class WearSessionState {
 
 ## 7. Roadmap: Fase Mínima (Semana 1 — HU-06)
 
-### HU-06: Captura de frecuencia cardíaca en el reloj
+### HU-06: Captura de frecuencia cardíaca en el reloj — ✅ COMPLETADA
 
-- [ ] **S1.1** `WearMessageClient.kt` — Escucha START/STOP del móvil vía MessageClient
-- [ ] **S1.2** `HealthServicesManager.kt` — Registra/cancela callback de MeasureClient para HEART_RATE_BPM
-- [ ] **S1.3** `HeartRateSample.kt` — Modelo con `bpm` (Double) y `timestamp` (Long, epoch millis)
-- [ ] **S1.4** `WearDataClient.kt` — Escribe muestras en `/ace/health/heart_rate` con timestamp en URI
-- [ ] **S1.5** `WearHealthRepository.kt` — Orquesta: recibe comando → activa sensor → envía datos
-- [ ] **S1.6** `StartExerciseUseCase.kt` — Expone: iniciar monitoreo de FC
-- [ ] **S1.7** `StopExerciseUseCase.kt` — Expone: detener monitoreo de FC
-- [ ] **S1.8** `SessionViewModel.kt` — Expone `WearSessionState`, reacciona a comandos del móvil
-- [ ] **S1.9** `SessionScreen.kt` + componentes — UI: FC grande, timer, botón DETENER, chip de conexión
-- [ ] **S1.10** `WearApplication.kt` + DI modules — Hilt provee dependencias
-- [ ] **S1.11** Verificar que **NO hay** dependencia a `:shared` en build (paths son strings literales locales)
-- [ ] **S1.12** Verificar que `MeasureClient` funciona en emulador Wear OS con Health Services
+- [x] **S1.1** `WearMessageClient.kt` — Escucha START/STOP del móvil vía MessageClient
+- [x] **S1.2** `HealthServicesManager.kt` — Registra/cancela callback de MeasureClient para HEART_RATE_BPM
+- [x] **S1.3** `HeartRateSample.kt` — Modelo con `bpm` (Double) y `timestamp` (Long, epoch millis)
+- [x] **S1.4** `WearDataClient.kt` — Escribe muestras en `/ace/health/heart_rate` con timestamp en URI
+- [x] **S1.5** `WearHealthRepository.kt` — Orquesta: recibe comando → activa sensor → envía datos
+- [x] **S1.6** `StartExerciseUseCase.kt` — Expone: iniciar monitoreo de FC (`invoke()` + `startSession(sessionId)`)
+- [x] **S1.7** `StopExerciseUseCase.kt` — Expone: detener monitoreo de FC (`invoke(sessionId)` + `dispose()`)
+- [x] **S1.8** `SessionViewModel.kt` — Expone `WearSessionState`, reacciona a comandos del móvil
+- [x] **S1.9** `SessionScreen.kt` + componentes — UI: FC grande, timer, botón DETENER, chip de conexión (splash, idle, active + `HeartRateDisplay`, `TimerDisplay`, `StopButton`, `ConnectionStatusChip`, `AceLogo`, `AceRingBackground`, `DiagLogPanel`)
+- [x] **S1.10** `WearApplication.kt` + DI modules — Hilt provee dependencias; registro ÚNICO de `MessageClient` listener en `onCreate()`
+- [x] **S1.11** `:shared` híbrido confirmado: `WearMessageClient` usa `DataLayerPaths` de `:shared`; `WearDataClient` usa `WearDataLayerPaths` local
+- [x] **S1.12** `MeasureClient` funciona en emulador Wear OS con Health Services (ver `ACE_Wear_Mobile_Connection_Guide.md`)
 
 ### Criterios de aceptación de HU-06
 
-- [ ] Wear OS registra callback de `MeasureClient` para `HEART_RATE_BPM` al recibir `START`.
-- [ ] Cada muestra conserva `value` y `time_interval` del tipo nativo.
-- [ ] `DataClient` escribe en `/ace/health/heart_rate`.
-- [ ] Al recibir `STOP`, se cancela el callback.
-- [ ] El reloj no persiste muestras localmente.
-- [ ] La URI incluye timestamp para no sobrescribir nodos.
+- [x] Wear OS registra callback de `MeasureClient` para `HEART_RATE_BPM` al recibir `START`.
+- [x] Cada muestra conserva `value` y `time_interval` del tipo nativo.
+- [x] `DataClient` escribe en `/ace/health/heart_rate`.
+- [x] Al recibir `STOP`, se cancela el callback.
+- [x] El reloj no persiste muestras localmente.
+- [x] La URI incluye timestamp para no sobrescribir nodos.
 
 ---
 

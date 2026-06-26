@@ -1,5 +1,7 @@
 # A.C.E — Deuda Técnica: S2 (Sesión) + S4 (Auth) + S6 (Ranking) + S10 (Perfil)
 
+> ⛔ **SUPERSEDED — 2026-06-25.** Este documento está obsoleto. La auditoría del 2026-06-25 verificó en código que **F1–F7, C3, C4, C5, M1, M2, M4, M5 ya están resueltos**; solo M3 (OfficialStatsDto) sigue pendiente. El registro único y actualizado es **`CONTEXT/DEUDA_TECNICA_v2.md`**. Este archivo se retiene solo como historial.
+
 > **Versión:** 1.0
 > **Fecha:** 2026-06-24
 > **Tipo:** Deuda técnica + features faltantes detectadas tras auditoría integral de los 3 módulos (`ace-backend`, `ace-mobile`, `ace-wear`) + `:shared`

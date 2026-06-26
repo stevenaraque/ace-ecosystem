@@ -1,11 +1,12 @@
 # A.C.E — Implementation Plan: Backend (`ace-backend`)
 
-> **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.3  
-> **Versión:** 4.3 (Migración a estructura por-feature + Dockerfile mejorado + gradlew tracked + application-prod.yml)  
-> **Fecha:** 2026-06-19  
-> **Stack:** Spring Boot 4.0.6 · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · PostgreSQL 16 · Flyway 10.15 · kotlinx-serialization  
-> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.4 (JitPack)  
+> **Estado:** En desarrollo (~85% implementado). S1–S10 funcionales (S4 completo).
+> **Versión:** 4.4 (S2/S3/S5/S6/S7/S9/S10 implementados; deuda técnica S3/S5/S6/S10 cerrada en migración V10; `:shared` bumped a 1.0.9)
+> **Fecha:** 2026-06-25
+> **Stack:** Spring Boot 4.0.6 · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · PostgreSQL 16 · Flyway 10.15 · kotlinx-serialization
+> **Depende de:** `com.github.reinaldojperalta:ace-shared` v1.0.9 (JitPack)
 > **Responsables:** Reinaldo, Santiago (Backend)
+> **Deuda técnica:** ver `CONTEXT/DEUDA_TECNICA_v2.md`. Único ítem funcional pendiente: **M3** (`OfficialStatsDto` recalculado de BD).
 
 ---
 
@@ -28,9 +29,16 @@ El backend es la **única fuente de verdad** para:
 
 **Despliegue y Entorno:** El proyecto cuenta con un `Dockerfile` optimizado que utiliza `gradlew` (wrapper 9.5.1), activa `SPRING_PROFILES_ACTIVE=prod` cargando `application-prod.yml` y usa runtime `jammy` (Debian) para despliegue en plataformas como Render.
 
-### Estado Real por Sistema (a fecha 2026-06-19)
-- **S4 (Auth):** ✅ Totalmente implementado en `auth/`.
-- **S1, S2, S3, S5, S6, S7, S9, S10:** ❌ No implementados (esquema SQL presente en Flyway V1–V4, pero esqueletos vacíos en código).
+### Estado Real por Sistema (a fecha 2026-06-25)
+- **S4 (Auth):** ✅ Totalmente implementado en `auth/` (login/register/refresh/logout + **desalojo en login = JWT único por dispositivo**, F7).
+- **S2 (Session):** ✅ Implementado (`exercise/` — `SyncBatchService` crea/actualiza `ExerciseSession`).
+- **S3 (Sync):** ✅ Implementado (`exercise/` — batch `/api/exercise/batch`, idempotencia por `block_id`, `BlockPersistenceService`).
+- **S5 (XP):** ✅ Implementado (`xp/` — `XpSanityValidator` con R1/R2/R3/R5, **sin `bonusMultiplier`** (C3 fix), `XpTransaction` con mapeo correcto (C4 fix), `FormulaService` con `version` real (M4)).
+- **S6 (Ranking):** ✅ Implementado (`ranking/` — `RankingRecalculationJob @Scheduled` cada hora, `RankEvaluator`, endpoints global/municipal).
+- **S7 (Streaks):** ✅ Implementado (`streak/` — `StreakEvaluationService` con **último bloque aceptado** (C5 fix)).
+- **S9 (History):** ✅ Implementado (sesiones persistidas en `exercise_sessions`).
+- **S10 (Perfil/Stats):** 🟡 Implementado (`user/` — `ProfileController`/`ProfileService` completos (F1), `StatsPersistenceService`). **Pendiente: M3** (`OfficialStatsDto` todavía copia de `clientStats`, no recalcula de BD).
+- **Deuda técnica resuelta en migración V10** (`V10__backend_deuda_tecnica_s3_s10.sql`): drop `bonus_multiplier`, siembra CYCLING/WALKING (F5), `balance_after` BIGINT.
 
 ---
 
@@ -69,7 +77,7 @@ repositories {
 dependencies {
     // ─── :shared vía JitPack ───
     // Coordenada exacta: JitPack sobrescribe group a com.github.reinaldojperalta
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.9")
 
     // ─── Spring Boot Starters ───
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -182,17 +190,17 @@ ace-backend/
 │   ├── security/
 │   │   └── JwtAuthenticationFilter.kt
 │   │
-│   ├── auth/                                # FEATURE COMPLETA (S4)
+│   ├── auth/                                # ✅ FEATURE COMPLETA (S4)
 │   │   ├── controller/AuthController.kt
 │   │   ├── model/User.kt, RefreshToken.kt
 │   │   ├── repository/UserRepository.kt, RefreshTokenRepository.kt
 │   │   └── service/AuthService.kt, JwtService.kt, RefreshTokenService.kt
 │   │
-│   ├── exercise/                            # Esqueleto (S2, S3)
-│   ├── ranking/                             # Esqueleto (S6)
-│   ├── streak/                              # Esqueleto (S7)
-│   ├── user/                                # Esqueleto (S1)
-│   └── xp/                                  # Esqueleto (S5, S10)
+│   ├── exercise/                            # ✅ IMPLEMENTADO (S2, S3) — ExerciseController, SyncBatchService, BlockPersistenceService, SessionRepository
+│   ├── ranking/                             # ✅ IMPLEMENTADO (S6) — RankingRecalculationJob (@Scheduled), RankEvaluator, controller
+│   ├── streak/                              # ✅ IMPLEMENTADO (S7) — StreakEvaluationService
+│   ├── user/                                # ✅ IMPLEMENTADO (S10) — ProfileController, ProfileService, StatsPersistenceService, UserProfileRepository
+│   └── xp/                                  # ✅ IMPLEMENTADO (S5) — XpFormula, XpTransaction, XpSanityValidator, FormulaService, XpTransactionService, XpController
 │
 ├── src/main/resources/
 │   ├── application.yml
@@ -202,7 +210,10 @@ ace-backend/
 │       ├── V1__init.sql
 │       ├── V2__xp_transactions.sql
 │       ├── V3__ranking_materialized.sql
-│       └── V4__seed_data.sql
+│       ├── V4__seed_data.sql
+│       ├── V5__align_entities.sql
+│       ├── V6__ranking_fix_pks.sql
+│       └── V10__backend_deuda_tecnica_s3_s10.sql   # C3/C4/F5 fixes (drop bonus_multiplier, balance_after BIGINT, seed CYCLING/WALKING)
 ```
 
 ---
@@ -251,31 +262,31 @@ ace-backend/
 
 ### Fase Mínima (Semanas 1-4) — TODOS los sistemas S1-S10 presentes
 
-- [ ] Esqueleto Spring Boot 4.0.6 + Kotlin 2.2.21 + compilerOptions DSL + `:shared` vía JitPack
-- [ ] PostgreSQL remoto configurado en perfil prod.
-- [ ] Flyway V1: todas las tablas (Opción B), V2: seeds rangos/ciudades, V3: índices
-- [ ] **S4 Auth:** Registro/login, JWT híbrido (access 15min / refresh 7días), tabla `refresh_tokens` con **SELECT FOR UPDATE** en rotación
-- [ ] **S4 Auth:** Endpoint `/api/auth/refresh` con rotación atómica y detección de **REFRESH_REUSED**
-- [ ] **S3 Sync:** Endpoint `POST /api/exercise/blocks` con validación de **batch size ≤ 20**
-- [ ] **S3 Sync:** Idempotencia con `ON CONFLICT (id) DO NOTHING` (block_id del móvil)
-- [ ] **S5 XP:** Endpoint `GET /api/xp/formulas` con header `X-Formula-Version`
-- [ ] **S5 XP:** `XpValidationService` con `RunningXpValidator` (valida, NO calcula)
-- [ ] **S5 XP:** Validación de sanidad: duración 270-330s, avg_bpm 30-250, sample_count coherente, xp ≤ fórmula
-- [ ] **S5 XP:** Tabla `xp_transactions` append-only con `balance_after`
-- [ ] **S7 Streaks:** `UserStreak` tabla + `StreakEvaluationService` (evalúa en misma transacción que bloque)
-- [ ] **S7 Streaks:** Respuesta de sync incluye `current_streak`, `best_streak`, `last_exercise_date`
-- [ ] **S6 Ranking:** Tablas `ranking_global` y `ranking_municipal` con **índice en position**
-- [ ] **S6 Ranking:** Job `@Scheduled` cada hora para recálculo batch
-- [ ] **S6 Ranking:** Endpoints `GET /api/ranking/global` y `/municipal/{cityId}` con top 100
-- [ ] **S10 Stats:** Validación de consistencia `client_stats` vs bloques recibidos
-- [ ] **S10 Stats:** Respuesta con `official_stats` y `correction_applied`
-- [ ] **S2 Session:** Validación de 1 ACTIVE por usuario, aborta anterior si llega nueva
-- [ ] **S8 Notif:** NO FCM (backend no envía push, todo local en mobile)
-- [ ] **S9 History:** NO expone endpoint de últimas 5 sesiones (backend tiene todas en `exercise_sessions`)
-- [ ] Tablas de auditoría (`SuspicionAudit`, `SessionGpsPoint`) creadas pero **sin lógica de escritura**
-- [ ] **compilerOptions DSL:** Verificar que build es successful con `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }`
-- [ ] **kotlinx-serialization:** Verificar que DTOs de :shared se serializan correctamente con Gson/kotlinx-serialization
-- [ ] **JitPack:** Verificar que `com.github.reinaldojperalta:ace-shared` se resuelve correctamente en build
+- [x] Esqueleto Spring Boot 4.0.6 + Kotlin 2.2.21 + compilerOptions DSL + `:shared` vía JitPack (1.0.9)
+- [x] PostgreSQL remoto configurado en perfil prod.
+- [x] Flyway V1: todas las tablas (Opción B), V2: seeds rangos/ciudades, V3: índices
+- [x] **S4 Auth:** Registro/login, JWT híbrido (access 15min / refresh 7días), tabla `refresh_tokens` con **SELECT FOR UPDATE** en rotación
+- [x] **S4 Auth:** Endpoint `/api/auth/refresh` con rotación atómica y detección de **REFRESH_REUSED**
+- [x] **S4 Auth (F7):** Desalojo en login/register (`revokeAllUserTokens`) — JWT único por dispositivo
+- [x] **S3 Sync:** Endpoint `POST /api/exercise/batch` con validación de **batch size ≤ 20**
+- [x] **S3 Sync:** Idempotencia con `ON CONFLICT (id) DO NOTHING` (block_id del móvil)
+- [x] **S5 XP:** Endpoint `GET /api/xp/formulas` con header `X-Formula-Version` (M4)
+- [x] **S5 XP:** `XpSanityValidator` (valida, NO calcula)
+- [x] **S5 XP:** Validación de sanidad: duración 10-330s (decisión equipo), avg_bpm 30-250, sample_count ≥0.5Hz (M2), xp ≤ fórmula; **sin `bonusMultiplier`** (C3)
+- [x] **S5 XP:** Tabla `xp_transactions` append-only con `balance_after BIGINT`, mapeo `@Column(name="xp_amount")` (C4)
+- [x] **S7 Streaks:** `UserStreak` tabla + `StreakEvaluationService` (evalúa en misma transacción que bloque)
+- [x] **S7 Streaks:** Respuesta de sync incluye `current_streak`, `best_streak`, `last_exercise_date`; usa **último bloque aceptado** (C5)
+- [x] **S6 Ranking:** Tablas `ranking_global` y `ranking_municipal` con **índice en position**
+- [x] **S6 Ranking:** Job `@Scheduled` cada hora para recálculo batch
+- [x] **S6 Ranking:** Endpoints `GET /api/ranking/global` y `/municipal/{cityId}` con top 100
+- [x] **S10 Stats:** `StatsPersistenceService` acumula por bloque aceptado; `ProfileController`/`ProfileService` (F1) — editar perfil
+- [ ] **S10 Stats (M3):** `OfficialStatsDto` debe **recalcular** de `user_stats`/`xp_transactions`, no copiar de `clientStats`
+- [x] **S2 Session:** `SyncBatchService.persistOrUpdateSession` crea/actualiza `ExerciseSession`
+- [x] **S8 Notif:** NO FCM (backend no envía push, todo local en mobile)
+- [x] **S9 History:** NO expone endpoint de últimas 5 sesiones (backend tiene todas en `exercise_sessions`)
+- [x] **compilerOptions DSL:** build successful con `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }`
+- [x] **kotlinx-serialization:** DTOs de :shared se serializan con Gson/kotlinx-serialization
+- [x] **JitPack:** `com.github.reinaldojperalta:ace-shared:1.0.9` se resuelve correctamente en build
 
 ### Fase de Transición (Semanas 5-8)
 [Idéntico a v4.0]

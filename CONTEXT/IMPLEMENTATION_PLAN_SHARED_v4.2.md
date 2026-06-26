@@ -1,12 +1,12 @@
 # A.C.E — Implementation Plan: Shared Module (`:shared`)
 
-> **Estado:** ✅ **Implementado y Publicado**  
-> **Versión:** 4.3 (Actualizado: `:shared` v1.0.4)  
-> **Fecha:** 2026-06-19  
-> **Stack:** Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · kotlinx-serialization 1.8.0 · Gson 2.11.0 · JUnit 5.11.0  
-> **Publicado en:** [JitPack](https://jitpack.io/#reinaldojperalta/ace-shared)  
-> **Depende de:** Apéndices S1, S2, S3, S4, S5, S6, S7, S8, S9, S10 y Arquitectura A.C.E v0.3  
-> **Consumido por:** `ace-backend`, `ace-mobile` (ace-wear NO consume `:shared` en MVP)
+> **Estado:** ✅ **Implementado y Publicado (v1.0.9)**
+> **Versión:** 4.4 (Actualizado: `:shared` v1.0.9; DTOs de perfil/stats añadidos post-1.0.4; `XpFormulaDto` sin `bonusMultiplier`)
+> **Fecha:** 2026-06-25
+> **Stack:** Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · kotlinx-serialization 1.8.0 · Gson 2.11.0 · JUnit 5.11.0
+> **Publicado en:** [JitPack](https://jitpack.io/#reinaldojperalta/ace-shared)
+> **Depende de:** Apéndices S1, S2, S3, S4, S5, S6, S7, S8, S9, S10 y Arquitectura A.C.E v0.4
+> **Consumido por:** `ace-backend`, `ace-mobile` (vía DTOs + `DataLayerPaths`), y `ace-wear` (híbrido: enums/constants, sin DTOs)
 
 ---
 
@@ -25,7 +25,7 @@ El módulo `:shared` es el **contrato inmutable** entre backend y mobile. Contie
 
 **Nota sobre JitPack:** El artifact se publica automáticamente vía [JitPack](https://jitpack.io). El group Maven se resuelve como `com.github.reinaldojperalta` (sobrescrito por JitPack). Los consumidores deben usar esta coordenada exacta.
 
-**Estado actual:** `:shared` v1.0.4 está **implementado, probado y publicado** en JitPack. Repo separado: `reinaldojperalta/ace-shared`. Ver §8 para detalles de consumo.
+**Estado actual:** `:shared` v1.0.9 está **implementado, probado y publicado** en JitPack (tags llegan a `v1.0.9`). Repo separado: `reinaldojperalta/ace-shared`. Consumido por backend (inline en `build.gradle.kts:29`) y mobile (`libs.versions.toml:25`). Ver §8 para detalles de consumo.
 
 ---
 
@@ -42,7 +42,7 @@ plugins {
 }
 
 group = "com.ace"
-version = "1.0.0"
+version = "1.0.9"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
@@ -136,10 +136,14 @@ ace-shared/                       <-- Repo separado: reinaldojperalta/ace-shared
 │   └── wrapper/
 │
 ├── src/main/kotlin/com/ace/shared/
-│   ├── dto/                      # DTOs inmutables (data classes)
+│   ├── dto/                      # DTOs inmutables (data classes, @Serializable)
 │   │   ├── ExerciseBlockDto.kt
 │   │   ├── ExerciseSessionDto.kt
+│   │   ├── SyncBatchRequestDto.kt
+│   │   ├── SyncBatchResponseDto.kt          # añadido post-1.0.4
+│   │   ├── RejectedBlockDto.kt              # añadido post-1.0.4
 │   │   ├── ClientStatsDto.kt
+│   │   ├── OfficialStatsDto.kt              # añadido post-1.0.4
 │   │   ├── XpFormulaDto.kt
 │   │   ├── XpAwardedResponseDto.kt
 │   │   ├── RankingEntryDto.kt
@@ -148,13 +152,17 @@ ace-shared/                       <-- Repo separado: reinaldojperalta/ace-shared
 │   │   ├── AuthRequestDto.kt
 │   │   ├── AuthResponseDto.kt
 │   │   ├── RefreshTokenRequestDto.kt
-│   │   └── SyncBatchRequestDto.kt
+│   │   ├── UserProfileDto.kt                # añadido en 1.0.6 (F1/F2)
+│   │   ├── UpdateProfileRequestDto.kt       # añadido en 1.0.6 (F1/F2)
+│   │   ├── StatsResponseDto.kt             # añadido post-1.0.4 (S10)
+│   │   ├── StatsReconcileRequestDto.kt     # añadido post-1.0.4 (S10)
+│   │   └── StatsReconcileResponseDto.kt    # añadido post-1.0.4 (S10)
 │   │
 │   ├── enums/
-│   │   ├── SportType.kt
+│   │   ├── SportType.kt          # RUNNING, CYCLING, WALKING (3 valores reales)
 │   │   ├── SessionStatus.kt
 │   │   ├── BlockStatus.kt
-│   │   └── NotificationChannelId.kt
+│   │   └── NotificationChannelId.kt  # enum con propiedad channelId (3 canales)
 │   │
 │   ├── constants/
 │   │   ├── DataLayerPaths.kt
@@ -170,6 +178,7 @@ ace-shared/                       <-- Repo separado: reinaldojperalta/ace-shared
 │       ├── GsonFactory.kt
 │       ├── InstantAdapter.kt
 │       ├── UuidAdapter.kt
+│       ├── SportTypeAdapter.kt            # añadido post-1.0.4
 │       └── KotlinxSerializationConfig.kt
 │
 └── src/test/kotlin/com/ace/shared/
@@ -246,11 +255,14 @@ data class XpFormulaDto(
     val sportType: SportType,
     val minBpm: Int,
     val xpPerMinute: Double,
-    val bonusMultiplier: Double = 1.0,
+    val maxXpPerBlock: Int,
+    val version: Int = 1,
     val effectiveSince: Long,
     val schemaVersion: Int = 1
 )
 ```
+
+> **Nota (C3 fix):** `bonusMultiplier` fue **eliminado** del contrato (no existía en el apéndice S5 y causaba desync móvil↔backend). La fórmula real es `minutes * xpPerMinute`, limitado por `maxXpPerBlock`.
 
 ### 4.5 XpAwardedResponseDto (S5)
 
@@ -371,14 +383,11 @@ data class SyncBatchRequestDto(
 enum class SportType {
     RUNNING,
     CYCLING,
-    SWIMMING,
-    WALKING,
-    HIIT,
-    STRENGTH,
-    YOGA,
-    OTHER
+    WALKING
 }
 ```
+
+> **Nota:** solo 3 deportes en el MVP (con fórmula/seed en la BD). El plan v4.2 listaba 8 valores idealizados; el código real y el seed (V10) manejan 3. Añadir más requiere DTO + seed + fórmula coordinados.
 
 ### 5.2 SessionStatus
 
@@ -600,19 +609,19 @@ object KotlinxSerializationConfig {
 5. JitPack detecta el tag automáticamente, compila y publica.
 6. Verificar estado en: `https://jitpack.io/#reinaldojperalta/ace-shared`
 
-**Estado actual:** v1.0.4 está publicado y disponible. Los consumidores (`ace-backend`, `ace-mobile`) usan esta versión. **`ace-wear` NO consume `:shared`** (paths hardcodeados).
+**Estado actual:** v1.0.9 está publicado y disponible. Los consumidores (`ace-backend`, `ace-mobile`) usan esta versión. **`ace-wear`** consume `:shared` en modo **híbrido** (enums/constantes, sin DTOs).
 
 ### 8.3 Coordenada Maven para Consumidores
 
 ```kotlin
-// Backend (ace-backend/build.gradle.kts)
+// Backend (ace-backend/build.gradle.kts, línea 29 — inline)
 repositories {
     mavenCentral()
     maven { url = uri("https://jitpack.io") }
 }
 
 dependencies {
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.4")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.9")
 }
 ```
 
@@ -625,14 +634,14 @@ repositories {
 }
 
 dependencies {
-    implementation(libs.ace.shared)  // apunta a ace-shared = "1.0.4" en libs.versions.toml
+    implementation(libs.ace.shared)  // apunta a ace-shared = "1.0.9" en libs.versions.toml
 }
 ```
 
 ```kotlin
-// Wear (ace-wear/app/build.gradle.kts) — ❌ NO consume :shared
-// Los paths del Data Layer se definen como strings literales locales.
-// No se declara dependency a ace-shared.
+// Wear (ace-wear/app/build.gradle.kts) — `:shared` HÍBRIDO
+// implementation(libs.ace.shared) declarado; se usan enums/constantes (DataLayerPaths),
+// pero NO se serializan DTOs (paths locales en WearDataClient).
 ```
 
 **⚠️ IMPORTANTE:** JitPack sobrescribe el `group` definido en `build.gradle.kts` (`com.ace`) por `com.github.reinaldojperalta`. Los consumidores DEBEN usar `com.github.reinaldojperalta:ace-shared`.
@@ -701,16 +710,14 @@ La migración desde monorepo a repo separado con JitPack **ya está completada**
 
 | Módulo | Estado | Versión `:shared` | Notas |
 |--------|--------|---------|-------|
-| **:shared** | ✅ **IMPLEMENTADO** | — | v1.0.4 publicada en JitPack. Repo separado: `reinaldojperalta/ace-shared`. |
-| **ace-backend** | 🔄 S4 Auth implementado, S2/S3/S5/S6/S7/S10 pendiente | 1.0.4 | Spring Boot 4.0.6. |
-| **ace-mobile** | 🔄 En desarrollo | 1.0.4 | AGP 9.0.1, Kotlin 2.2.21. |
-| **ace-wear** | 🔄 HU-06 en desarrollo | ❌ **NO consume** `:shared` | Paths hardcodeados como strings literales locales. |
+| **:shared** | ✅ **IMPLEMENTADO** | 1.0.9 | Publicada en JitPack. Repo separado: `reinaldojperalta/ace-shared`. DTOs de perfil/stats añadidos post-1.0.4. |
+| **ace-backend** | 🟢 En desarrollo (~85%) | 1.0.9 | S1–S10 funcionales; S4 completo; deuda M3 (OfficialStatsDto). |
+| **ace-mobile** | 🟢 En desarrollo (~85%) | 1.0.9 | S1–S10 + F1–F7 completos. |
+| **ace-wear** | 🟢 HU-06 completada | híbrido | Captura + transmisión + UI completas. `:shared` híbrido (enums/constants). |
 
 ### Próximos pasos recomendados
-1. **Backend:** Implementar S2/S3/S5/S6/S7/S10 (S4 ya completo).
-2. **Mobile:** Completar integración con backend (auth interceptor, sync, XP).
-3. **Wear:** Implementar envío de FC cruda por DataClient (paths hardcodeados, no `:shared`). **NO consumir** `:shared`.
-4. **:shared:** Mantener estable en v1.0.4. No breaking changes sin coordinación previa.
+1. **:shared:** Mantener estable en v1.0.9. No breaking changes sin coordinación previa (PR revisado por Reinaldo + Steven).
+2. **Deuda (cuando se toque `:shared`):** alinear `SyncConstants.BLOCK_DURATION_*` con la decisión de equipo (bloques de 60s) — ver `DEUDA_TECNICA_v2.md` D8. El `build.gradle.kts` local debe llevar `version = "1.0.9"` (coincidir con el tag publicado).
 
 ---
 

@@ -1,5 +1,7 @@
 # A.C.E — Deuda Técnica: S3 (Sync) + S5 (XP)
 
+> ⛔ **SUPERSEDED — 2026-06-25.** Este documento está obsoleto. La auditoría del 2026-06-25 verificó en código que **C1, C2, C3, C4, C5, M1, M2, M4, M5, M6 ya están resueltos** y M7 está documentada. El registro único y actualizado es **`CONTEXT/DEUDA_TECNICA_v2.md`**. Este archivo se retiene solo como historial.
+
 > **Versión:** 1.0
 > **Fecha:** 2026-06-19
 > **Tipo:** Deuda técnica detectada tras auditoría de los Hitos 1 y 2

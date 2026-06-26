@@ -1,11 +1,12 @@
 # A.C.E — Implementation Plan: Mobile (`ace-mobile`)
 
-> **Estado:** Coherente con Apéndices Aprobados S1-S10 y Arquitectura v0.2  
-> **Versión:** 4.3 (Actualizado: Kotlin 2.2.21, legacy.kapt, ace-shared 1.0.4, estado de integración)  
-> **Fecha:** 2026-06-19  
-> **Stack:** Android 13+ (API 33) · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Wear OS Data Layer API · Retrofit 2.11.0 + Gson · Hilt 2.59.2 · Room 2.6.1 · Jetpack Compose BOM 2024.09.00 · legacy.kapt  
-> **Depende de:** `com.github.reinaldojperalta:ace-shared:1.0.4` (JitPack)  
+> **Estado:** En desarrollo (~85% implementado). S1–S10 y F1–F7 completos.
+> **Versión:** 4.4 (S1–S10 implementados; F1–F7 completos; layout por-feature `feature/`; `:shared` bumped a 1.0.9)
+> **Fecha:** 2026-06-25
+> **Stack:** Android 13+ (API 33) · Kotlin 2.2.21 · Gradle 8.10+ (Kotlin DSL) · AGP 9.0.1 · Wear OS Data Layer API · Retrofit 2.11.0 + Gson · Hilt 2.59.2 · Room 2.6.1 · Jetpack Compose BOM 2024.09.00 · legacy.kapt
+> **Depende de:** `com.github.reinaldojperalta:ace-shared:1.0.9` (JitPack, `libs.versions.toml:25`)
 > **Responsable:** Steven Araque (Mobile/Wear Lead) · Integración con Reinaldo/Santiago (Backend)
+> **Deuda técnica:** ver `CONTEXT/DEUDA_TECNICA_v2.md` (ítems D1–D6: código muerto a limpiar, sin cambio de comportamiento).
 
 ---
 
@@ -28,11 +29,20 @@ El módulo `:mobile` es el **orquestador, traductor, calculador y buffer** del e
 
 **Nota sobre :shared:** El móvil consume el módulo `:shared` vía **JitPack** como artifact Maven externo. La coordenada exacta es `com.github.reinaldojperalta:ace-shared:1.0.4`. No se incluye como `project(":shared")` ni como JAR local.
 
-### Estado Real por Sistema (a fecha 2026-06-19)
-- **S1 (Sensor):** ✅ Implementado (`WearDataSource`).
-- **S4 (Auth):** ✅ Implementado.
-- **S2 (Session):** 🟡 Funcional, el cierre de bloque (duración >= 30s) ya se persiste (`ExerciseSyncService.kt`), falta conexión para enviarlo al backend.
-- **S3, S5, S6, S7, S9, S10:** ❌ Esqueletos, sin implementar.
+### Estado Real por Sistema (a fecha 2026-06-25)
+- **S1 (Sensor):** ✅ Implementado (`WearDataSource` + `WearDataListenerService`).
+- **S4 (Auth):** ✅ Implementado (login/register/refresh/logout + `AuthInterceptor` con race-condition control).
+- **S2 (Session):** ✅ Implementado — captura, cierre de bloque persistido en Room, **pausa manual + auto-pausa por FC** (F6: `PAUSE_BPM_THRESHOLD=110`, `LOW_BPM_PAUSE_SECONDS=30`, `SessionUiState.Paused(isAutoPaused)`).
+- **S3 (Sync):** ✅ Implementado — `BlockRepository` (Room), estados PENDING/SYNCING/SYNCED/ERROR, batch, backoff.
+- **S5 (XP):** ✅ Implementado — `CalculateBlockXpUseCase`, fórmulas cacheadas, recompensa inmediata.
+- **S6 (Ranking):** ✅ Implementado — cache local, **municipal funcional vía `cityId`** (F4), auto-refresh ON_RESUME + pull-to-refresh/refresh button, invalidación de cache en `rankChanged`.
+- **S7 (Streaks):** ✅ Implementado — cache de `StreakStateDto`.
+- **S9 (History):** ✅ Implementado — FIFO 5 sesiones local.
+- **S10 (Perfil/Stats):** ✅ Implementado — `UserApi`/`UserRepository`/`ProfileScreen` editable (F2), selector de ciudad, `setCityId` persistido; `AccumulateStatsUseCase`/reconciliación.
+
+**Features F1–F7 (todas completas):** F1 editar perfil (backend), F2 editar perfil (mobile), F3 crear cuenta (`RegisterScreen` + wiring), F4 ranking municipal + auto-refresh, F5 fórmulas deportes (selector), F6 pausa/auto-pausa, F7 JWT único (backend).
+
+**Deuda (código muerto, sin impacto funcional):** `SessionRepositoryImpl` placeholder (D1), 6 stubs de 0 bytes (D2), `WearDataListenerService` duplicado (D6 — verificar antes de eliminar), botón "olvidar contraseña" vacío (D7, fuera de alcance).
 
 ---
 
@@ -106,7 +116,7 @@ android {
 dependencies {
     // ─── :shared vía JitPack ───
     // Coordenada exacta: JitPack sobrescribe group a com.github.reinaldojperalta
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.4")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.9")
 
     // ─── Kotlin & Corrutinas ───
     implementation(libs.kotlin.stdlib)
@@ -204,128 +214,33 @@ dependencies {
 
 ```
 ace-mobile/
-├── build.gradle.kts                      # AGP 9.0.1, Kotlin 2.1.20 built-in, Hilt, KSP, Room, Compose, Wearable
+├── build.gradle.kts                      # AGP 9.0.1, Kotlin 2.2.21 built-in, Hilt 2.59.2, legacy.kapt, Room, Compose, Wearable
 ├── settings.gradle.kts                   # include ':app'
-├── gradle/libs.versions.toml
+├── gradle/libs.versions.toml             # ace-shared = "1.0.9"
 ├── gradle/wrapper/
 │
-├── app/build.gradle.kts                  # JitPack: com.github.reinaldojperalta:ace-shared
+├── app/build.gradle.kts                  # applicationId = "sena.adso.ace"; JitPack ace-shared:1.0.9
 │
 ├── src/main/kotlin/com/ace/mobile/
 │   ├── MobileApplication.kt              # @HiltAndroidApp, crea NotificationChannels (S8 §5.2)
 │   │
-│   ├── di/                               # Hilt Modules
-│   │   ├── NetworkModule.kt              # Retrofit + Gson + OkHttp + AuthInterceptor
-│   │   ├── DatabaseModule.kt             # Room database (SQLite local)
-│   │   ├── DataStoreModule.kt            # DataStore para preferencias simples (NO tokens — tokens van a Room)
-│   │   ├── WearModule.kt                 # DataClient, MessageClient
-│   │   └── WorkManagerModule.kt          # ConfigurationProvider
+│   ├── core/                             # Núcleo transversal
+│   │   ├── data/                         # SessionRepository/Impl, SessionSampleBuffer/Impl, BlockRepository
+│   │   ├── database/{dao,entity}/        # Room: BlockDao, SessionDao, UserDao, RankingCacheDao, etc. + entities
+│   │   ├── datastore/                    # UserPreferencesDataStore (cityId, prefs)
+│   │   ├── di/                           # Hilt: NetworkModule, DatabaseModule, RepositoryModule, ...
+│   │   └── model/                        # HeartRateSample, ...
 │   │
-│   ├── data/
-│   │   ├── local/
-│   │   │   ├── database/
-│   │   │   │   ├── AceDatabase.kt        # Room database principal
-│   │   │   │   ├── dao/
-│   │   │   │   │   ├── SessionDao.kt     # CRUD local_sessions (S2)
-│   │   │   │   │   ├── BlockDao.kt       # CRUD local_blocks con estados PENDING/SYNCING/SYNCED/ERROR (S3)
-│   │   │   │   │   ├── UserDao.kt        # CRUD local_user: tokens, device_id, profile (S4, S10)
-│   │   │   │   │   ├── HistoryDao.kt     # CRUD local_session_history FIFO 5 (S9)
-│   │   │   │   │   ├── StatsDao.kt       # CRUD local_user_stats (S10)
-│   │   │   │   │   └── RankingCacheDao.kt # CRUD local_ranking_cache (S6)
-│   │   │   │   └── entity/
-│   │   │   │       ├── LocalSessionEntity.kt
-│   │   │   │       ├── LocalBlockEntity.kt
-│   │   │   │       ├── LocalUserEntity.kt
-│   │   │   │       ├── LocalSessionHistoryEntity.kt
-│   │   │   │       ├── LocalUserStatsEntity.kt
-│   │   │   │       └── LocalRankingCacheEntity.kt
-│   │   │   │
-│   │   │   └── datastore/
-│   │   │       └── UserPreferencesDataStore.kt
-│   │   │
-│   │   ├── remote/
-│   │   │   ├── api/
-│   │   │   │   ├── AuthApi.kt
-│   │   │   │   ├── ExerciseApi.kt
-│   │   │   │   ├── RankingApi.kt
-│   │   │   │   ├── XpFormulaApi.kt
-│   │   │   │   └── UserApi.kt
-│   │   │   ├── dto/                          # NO USAR — importar desde com.ace.shared.dto.*
-│   │   │   └── interceptor/
-│   │   │       └── AuthInterceptor.kt
-│   │   │
-│   │   ├── wear/
-│   │   │   ├── WearDataSource.kt
-│   │   │   ├── WearMessageClient.kt
-│   │   │   └── model/
-│   │   │       └── WearHeartRateSample.kt
-│   │   │
-│   │   └── repository/
-│   │       ├── AuthRepository.kt
-│   │       ├── ExerciseRepository.kt
-│   │       ├── WearSyncRepository.kt
-│   │       ├── SessionRepository.kt
-│   │       ├── BlockRepository.kt
-│   │       ├── HistoryRepository.kt
-│   │       ├── StatsRepository.kt
-│   │       ├── RankingCacheRepository.kt
-│   │       └── UserRepository.kt
-│   │
-│   ├── domain/
-│   │   ├── model/
-│   │   │   ├── ExerciseSession.kt
-│   │   │   ├── HeartRateAggregate.kt
-│   │   │   ├── SyncStatus.kt
-│   │   │   └── StreakReminderState.kt
-│   │   │
-│   │   └── usecase/
-│   │       ├── auth/
-│   │       │   ├── LoginUseCase.kt
-│   │       │   ├── LogoutUseCase.kt
-│   │       │   └── RefreshTokenUseCase.kt
-│   │       ├── exercise/
-│   │       │   ├── StartSessionUseCase.kt
-│   │       │   ├── PauseSessionUseCase.kt
-│   │       │   ├── ResumeSessionUseCase.kt
-│   │       │   ├── StopSessionUseCase.kt
-│   │       │   └── SendPendingBlocksUseCase.kt
-│   │       ├── wear/
-│   │       │   ├── ReceiveWearDataUseCase.kt
-│   │       │   └── BuildExerciseBlockUseCase.kt
-│   │       ├── xp/
-│   │       │   ├── CalculateBlockXpUseCase.kt
-│   │       │   └── CacheXpFormulasUseCase.kt
-│   │       ├── streak/
-│   │       │   └── CheckStreakUseCase.kt
-│   │       └── stats/
-│   │           ├── AccumulateStatsUseCase.kt
-│   │           └── ReconcileStatsUseCase.kt
-│   │
-│   ├── presentation/
-│   │   ├── common/
-│   │   ├── auth/
-│   │   │   ├── LoginScreen.kt
-│   │   │   └── LoginViewModel.kt
-│   │   ├── exercise/
-│   │   │   ├── SessionScreen.kt
-│   │   │   ├── SessionViewModel.kt
-│   │   │   └── SessionUiState.kt
-│   │   ├── ranking/
-│   │   │   ├── RankingScreen.kt
-│   │   │   └── RankingViewModel.kt
-│   │   ├── profile/
-│   │   │   ├── ProfileScreen.kt
-│   │   │   └── ProfileViewModel.kt
-│   │   └── history/
-│   │       ├── HistoryScreen.kt
-│   │       └── HistoryViewModel.kt
-│   │
-│   └── service/
-│       ├── ExerciseSyncService.kt
-│       └── worker/
-│           ├── SyncBlockWorker.kt
-│           ├── CheckStreakWorker.kt
-│           └── SyncErrorNotificationWorker.kt
+│   └── feature/                          # LAYOUT POR-FEATURE (cada feature: data/domain/presentation/service)
+│       ├── auth/                         # S4 + F3: data/AuthApi, AuthRepository; presentation/{Login,Register}Screen+ViewModel
+│       ├── exercise/                     # S2/S5 + F6: domain/{Start,Pause,Resume,Stop}SessionUseCase; presentation/{Session,SessionUiState}ViewModel; service/ExerciseSyncService
+│       ├── history/                      # S9: HistoryScreen/ViewModel
+│       ├── profile/                      # S10 + F2: data/{UserApi,UserRepository}; presentation/{Profile,ProfileViewModel}Screen
+│       ├── ranking/                      # S6 + F4: data/RankingCacheRepository; presentation/{Ranking,RankingViewModel}Screen
+│       ├── stats/                        # S10: domain/AccumulateStatsUseCase, ReconcileStatsUseCase
+│       ├── streak/                       # S7: domain/CheckStreakUseCase
+│       ├── wear/                         # S1: data/WearDataSource, WearMessageClient; service/WearDataListenerService
+│       └── xp/                           # S5: domain/{CalculateBlockXp,CacheXpFormulas}UseCase
 │
 ├── src/main/res/
 │   └── values/
@@ -333,6 +248,8 @@ ace-mobile/
 │
 └── src/main/AndroidManifest.xml
 ```
+
+> **Nota sobre el layout:** la app usa **estructura por-feature** (`core/` + `feature/<nombre>/` con subcarpetas `data/domain/presentation/service`), no el layout plano por capas del plan v4.3. `applicationId = "sena.adso.ace"` (no `sena.adso.ace_mobile`).
 
 ---
 
@@ -382,32 +299,36 @@ ace-mobile/
 
 ### Fase Mínima (Semanas 1-4) — TODOS los sistemas presentes
 
-- [ ] Esqueleto Android Studio: módulo `:mobile`, AGP 9.0.1, Kotlin 2.2.21, Hilt 2.59.2, legacy.kapt, Compose, Room
-- [ ] Integración con `:shared` vía JitPack: `com.github.reinaldojperalta:ace-shared:1.0.4` (DTOs y enums)
-- [ ] **S4 Auth:** Login/Registro UI + AuthRepository + Room `local_user` (tokens, device_id)
-- [ ] **S4 Auth:** `AuthInterceptor` con flag `isRefreshing` + cola de peticiones + manejo `REFRESH_REUSED`
-- [ ] **S1 Sensor:** `WearDataSource` recibe FC por DataClient en path `/ace/health/heart_rate`
-- [ ] **S1 Sensor:** Buffer circular RAM 300 muestras, timeout desconexión > 5s
-- [ ] **S2 Session:** `ExerciseSyncService` (Foreground `health`) con notificación persistente
-- [ ] **S2 Session:** Estados ACTIVE, PAUSED, COMPLETED, ABORTED. Solo 1 ACTIVE.
-- [ ] **S2 Session:** `BuildExerciseBlockUseCase` arma `ExerciseBlockDto` con `block_id` UUIDv4
-- [ ] **S5 XP:** `CalculateBlockXpUseCase` con fórmulas cacheadas de Room (descargadas de `GET /api/xp/formulas`)
-- [ ] **S5 XP:** Recompensa inmediata "+X XP" visible offline
-- [ ] **S3 Sync:** `SendPendingBlocksUseCase` con WorkManager, batch ≤ 20, backoff exponencial 15min→4h, 5 reintentos
-- [ ] **S3 Sync:** Estados PENDING → SYNCING → SYNCED/ERROR. Idempotencia por block_id.
-- [ ] **S7 Streaks:** `CheckStreakWorker` diario a las 20:00. Notificación local si no entrenó.
-- [ ] **S7 Streaks:** Cache de `current_streak`, `best_streak`, `last_exercise_date` desde respuesta de sync
-- [ ] **S8 Notif:** 3 NotificationChannels: ace_session_active, ace_streak_reminder, ace_sync_error
-- [ ] **S8 Notif:** Foreground service notif durante sesión. Sync error notif tras 5 reintentos.
-- [ ] **S6 Ranking:** Pantalla de ranking con cache local 1h (posición propia + top 10)
-- [ ] **S6 Ranking:** Invalida cache si `rankChanged = true` en respuesta de sync
-- [ ] **S9 History:** `local_session_history` FIFO 5 sesiones, sin discriminar categoría
-- [ ] **S10 Stats:** `local_user_stats` con acumulación inmediata y promedio ponderado por sampleCount
-- [ ] **S10 Stats:** Envía `client_stats` en CADA batch. Recibe `official_stats`. Aplica corrección.
-- [ ] **S10 Stats:** Corrección silenciosa si dif < 10 XP. Toast si dif ≥ 10 XP.
-- [ ] **AGP 9.0 + KSP:** Verificar que build es successful con KSP procesando Room y Hilt correctamente.
-- [ ] **Built-in Kotlin:** Verificar que no se usa `org.jetbrains.kotlin.android` ni `org.jetbrains.kotlin.kapt`
-- [ ] **JitPack:** Verificar que `com.github.reinaldojperalta:ace-shared` se resuelve correctamente en build
+- [x] Esqueleto Android Studio: módulo `:mobile`, AGP 9.0.1, Kotlin 2.2.21, Hilt 2.59.2, legacy.kapt, Compose, Room
+- [x] Integración con `:shared` vía JitPack: `com.github.reinaldojperalta:ace-shared:1.0.9` (DTOs y enums)
+- [x] **S4 Auth:** Login/Registro UI + AuthRepository + Room `local_user` (tokens, device_id)
+- [x] **S4 Auth:** `AuthInterceptor` con flag `isRefreshing` + cola de peticiones + manejo `REFRESH_REUSED`
+- [x] **F3 Crear cuenta:** `RegisterScreen` + `RegisterViewModel`, botón "CREAR CUENTA" cableado, ruta `register_screen_route`
+- [x] **S1 Sensor:** `WearDataSource` (+ `WearDataListenerService`) recibe FC por DataClient en path `/ace/health/heart_rate`
+- [x] **S1 Sensor:** Buffer circular RAM, timeout desconexión > 5s
+- [x] **S2 Session:** `ExerciseSyncService` (Foreground `health`) con notificación persistente
+- [x] **S2 Session:** Estados ACTIVE, PAUSED, COMPLETED, ABORTED. Solo 1 ACTIVE.
+- [x] **S2 Session:** `BuildExerciseBlockUseCase` arma `ExerciseBlockDto` con `block_id` UUIDv4; cierre de bloque persistido en Room
+- [x] **F6 Pausa:** `PauseSessionUseCase`/`ResumeSessionUseCase` implementados; `SessionUiState.Paused(isAutoPaused)`; botones Pausar/Reanudar
+- [x] **F6 Auto-pausa:** watcher FC (`PAUSE_BPM_THRESHOLD=110`, `LOW_BPM_PAUSE_SECONDS=30`); reanudación automática si no fue pausa manual
+- [x] **S5 XP:** `CalculateBlockXpUseCase` con fórmulas cacheadas de Room (descargadas de `GET /api/xp/formulas`)
+- [x] **S5 XP:** Recompensa inmediata "+X XP" visible offline
+- [x] **F5 Selector deporte:** `SessionScreen` renderiza un botón por cada `SportType.entries`
+- [x] **S3 Sync:** `SendPendingBlocksUseCase` con WorkManager, batch ≤ 20, backoff exponencial, reintentos
+- [x] **S3 Sync:** Estados PENDING → SYNCING → SYNCED/ERROR. Idempotencia por block_id.
+- [x] **S7 Streaks:** `CheckStreakWorker` diario a las 20:00. Notificación local si no entrenó.
+- [x] **S7 Streaks:** Cache de `current_streak`, `best_streak`, `last_exercise_date` desde respuesta de sync
+- [x] **S8 Notif:** 3 NotificationChannels: ace_session_active, ace_streak_reminder, ace_sync_error
+- [x] **S8 Notif:** Foreground service notif durante sesión. Sync error notif tras 5 reintentos.
+- [x] **S6 Ranking:** Pantalla de ranking con cache local 1h (posición propia + top 10)
+- [x] **S6 Ranking:** Invalida cache si `rankChanged = true` en respuesta de sync; auto-refresh ON_RESUME + botón refresh
+- [x] **F4 Municipal:** `cityId` persistido vía `setCityId` (F2); tab municipal funcional
+- [x] **F2 Editar perfil:** `UserApi`/`UserRepository`/`ProfileScreen` editable (username, nickname, city, weight, birthDate)
+- [x] **S9 History:** `local_session_history` FIFO 5 sesiones, sin discriminar categoría
+- [x] **S10 Stats:** `local_user_stats` con acumulación inmediata y promedio ponderado por sampleCount
+- [x] **S10 Stats:** Envía `client_stats` en CADA batch. Recibe `official_stats`.
+- [x] **Built-in Kotlin:** No se usa `org.jetbrains.kotlin.android` ni `org.jetbrains.kotlin.kapt` (legacy.kapt)
+- [x] **JitPack:** `com.github.reinaldojperalta:ace-shared:1.0.9` se resuelve correctamente en build
 
 ### Fase de Transición (Semanas 5-8)
 [Idéntico a v4.0]

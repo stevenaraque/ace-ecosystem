@@ -1,5 +1,7 @@
 # A.C.E — Handoff: Limpieza y Reorganización del Ecosistema
 
+> ⛔ **SUPERSEDED — 2026-06-25.** Las tareas de limpieza pendientes de este handoff (Bloques 2.1–2.4, 3, 4, 5) se re-auditaron contra el código. Estado real: Bloque 3 (cierre de bloque) y Bloque 4 (userId) **ya están hechos**; los Bloques 2.1–2.4 (limpieza de configs vacíos, jar huérfano, tests vacíos) y Bloque 5 (WearDataListenerService) se consolidaron en **`CONTEXT/DEUDA_TECNICA_v2.md`** como ítems D1–D6. Este archivo se retiene solo como historial.
+
 > **Versión:** 1.2
 > **Fecha:** 2026-06-19
 > **Tipo:** Tareas de refactor + limpieza + documentación

@@ -13,6 +13,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import sena.adso.ace_mobile.BuildConfig // Importación corregida explícitamente
 import com.ace.shared.enums.SportType
 import java.util.Locale
 
@@ -35,9 +37,10 @@ fun SessionScreen(
     val elapsedSeconds by viewModel.elapsedSeconds.collectAsState()
     val blockCount by viewModel.blockCount.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
-    val samplesReceived by viewModel.samplesReceived.collectAsState()
     val totalXp by viewModel.totalXp.collectAsState()
-    val lowBpmSeconds by viewModel.lowBpmSeconds.collectAsState()
+
+    // NUEVO: Observar el estado de simulación
+    val isSimulating by viewModel.isSimulating.collectAsState()
 
     Column(
         modifier = Modifier
@@ -47,77 +50,61 @@ fun SessionScreen(
         verticalArrangement = Arrangement.Center
     ) {
         when (val state = uiState) {
-            is SessionUiState.Idle -> SessionIdleContent(
-                onStart = { sportType -> viewModel.startSession(sportType, userId) }
-            )
-
+            is SessionUiState.Idle -> {
+                SessionIdleContent(onStartSession = { sport ->
+                    viewModel.startSession(sport, userId)
+                })
+            }
             is SessionUiState.Loading -> {
                 CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Starting session...")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Initializing session...")
             }
-
             is SessionUiState.Active -> {
-                val session = state.session
                 SessionActiveContent(
-                    session = session,
+                    session = state.session,
                     heartRate = heartRate,
                     elapsedSeconds = elapsedSeconds,
                     blockCount = blockCount,
-                    isConnected = isConnected,
-                    samplesReceived = samplesReceived,
                     totalXp = totalXp,
-                    lowBpmSeconds = lowBpmSeconds,
+                    isConnected = isConnected,
+                    isSimulating = isSimulating, // Pasar propiedad
+                    onToggleSimulation = { viewModel.toggleSimulation() }, // Pasar callback
                     onPause = { viewModel.pauseSession() },
                     onStop = { viewModel.stopSession() }
                 )
             }
-
             is SessionUiState.Paused -> {
-                val session = state.session
                 SessionPausedContent(
-                    session = session,
+                    session = state.session,
                     heartRate = heartRate,
                     elapsedSeconds = elapsedSeconds,
                     blockCount = blockCount,
-                    isConnected = isConnected,
-                    samplesReceived = samplesReceived,
                     totalXp = totalXp,
+                    isConnected = isConnected,
                     isAutoPaused = state.isAutoPaused,
+                    isSimulating = isSimulating, // Pasar propiedad
+                    onToggleSimulation = { viewModel.toggleSimulation() }, // Pasar callback
                     onResume = { viewModel.resumeSession() },
                     onStop = { viewModel.stopSession() }
                 )
             }
-
             is SessionUiState.Stopping -> {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Stopping session...",
-                    style = MaterialTheme.typography.headlineSmall
-                )
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.secondary)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Waiting for watch confirmation",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
+                Text("Closing final block & saving session...")
             }
-
             is SessionUiState.Completed -> {
-                val completed = uiState as SessionUiState.Completed
                 SessionCompletedContent(
-                    session = completed.session,
-                    xpGained = completed.xpGained,
-                    blocksInSession = completed.blocksInSession,
+                    session = state.session,
+                    xpGained = state.xpGained,
+                    blocksInSession = state.blocksInSession,
                     onReset = { viewModel.resetState() }
                 )
             }
-
             is SessionUiState.Error -> {
-                val message = (uiState as SessionUiState.Error).message
                 SessionErrorContent(
-                    message = message,
+                    message = state.message,
                     onRetry = { viewModel.resetState() }
                 )
             }
@@ -126,31 +113,21 @@ fun SessionScreen(
 }
 
 @Composable
-fun SessionIdleContent(
-    onStart: (SportType) -> Unit
-) {
-    Text(
-        text = "Start Exercise",
-        style = MaterialTheme.typography.headlineMedium
-    )
-
+fun SessionIdleContent(onStartSession: (SportType) -> Unit) {
+    Text(text = "Start a New Workout", style = MaterialTheme.typography.headlineMedium)
     Spacer(modifier = Modifier.height(24.dp))
-
-    Text("Select activity type:", style = MaterialTheme.typography.bodyLarge)
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Column {
-        SportType.entries.forEach { sport ->
-            Button(
-                onClick = { onStart(sport) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
-                Text(sport.name)
-            }
-        }
+    Button(
+        onClick = { onStartSession(SportType.RUNNING) },
+        modifier = Modifier.fillMaxWidth(0.7f)
+    ) {
+        Text("RUNNING")
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Button(
+        onClick = { onStartSession(SportType.CYCLING) },
+        modifier = Modifier.fillMaxWidth(0.7f)
+    ) {
+        Text("CYCLING")
     }
 }
 
@@ -160,117 +137,64 @@ fun SessionActiveContent(
     heartRate: Double,
     elapsedSeconds: Int,
     blockCount: Int,
-    isConnected: Boolean,
-    samplesReceived: Int,
     totalXp: Double,
-    lowBpmSeconds: Int,
+    isConnected: Boolean,
+    isSimulating: Boolean,
+    onToggleSimulation: () -> Unit,
     onPause: () -> Unit,
     onStop: () -> Unit
 ) {
+    Text(text = "Session Active", style = MaterialTheme.typography.headlineSmall, color = Color.Green)
+    Text(text = "Sport: ${session.sportType.name}", style = MaterialTheme.typography.bodyLarge)
+
+    Spacer(modifier = Modifier.height(16.dp))
     Text(
-        text = "Session Active!",
-        style = MaterialTheme.typography.headlineMedium,
-        color = MaterialTheme.colorScheme.primary
+        text = if (isConnected) "Watch Connected" else "Searching Watch...",
+        color = if (isConnected) Color.Green else Color.Gray,
+        style = MaterialTheme.typography.bodyMedium
     )
 
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text("Sport: ${session.sportType.name}", style = MaterialTheme.typography.bodyLarge)
-    Text("Session: ${session.sessionId.take(8)}...", style = MaterialTheme.typography.bodySmall)
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    // ← NUEVO: Warning de auto-pausa inminente
-    if (heartRate > 0 && heartRate < 110 && lowBpmSeconds > 20) {
-        Text(
-            text = "⚠️ FC baja — pausa en ${30 - lowBpmSeconds}s",
-            color = Color(0xFFFFA000),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-    }
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val connectionColor = if (isConnected) Color.Green else Color.Red
-        val connectionText = if (isConnected) "Watch connected" else "Watch disconnected"
-        Text(
-            text = "●",
-            color = connectionColor,
-            style = MaterialTheme.typography.titleMedium
-        )
-        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-        Text(
-            text = connectionText,
-            style = MaterialTheme.typography.bodyMedium,
-            color = connectionColor
-        )
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        LiveDataCard(
-            label = "Heart Rate",
-            value = if (heartRate > 0) "${heartRate.toInt()}" else "--",
-            unit = "BPM"
-        )
-        LiveDataCard(
-            label = "Time",
-            value = "${elapsedSeconds / 60}:${String.format(Locale.getDefault(), "%02d", elapsedSeconds % 60)}",
-            unit = ""
-        )
-        LiveDataCard(
-            label = "Samples",
-            value = "$samplesReceived",
-            unit = "rcv"
-        )
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        LiveDataCard(
-            label = "Blocks",
-            value = "$blockCount",
-            unit = ""
-        )
-        LiveDataCard(
-            label = "XP",
-            value = String.format(Locale.getDefault(), "%.2f", totalXp),
-            unit = ""
-        )
-    }
+    Spacer(modifier = Modifier.height(24.dp))
+    Text(
+        text = String.format(Locale.getDefault(), "%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
+        style = MaterialTheme.typography.displayMedium
+    )
 
     Spacer(modifier = Modifier.height(24.dp))
-
-    // ← NUEVO: Botones PAUSE + STOP
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
+        LiveDataCard(label = "Heart Rate", value = "${heartRate.toInt()}", unit = "BPM")
+        LiveDataCard(label = "Blocks", value = "$blockCount", unit = "")
+        LiveDataCard(label = "XP Accum.", value = String.format(Locale.getDefault(), "%.1f", totalXp), unit = "XP")
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    // REQUISITO: Botón de simulación en Debug
+    if (BuildConfig.DEBUG) {
         Button(
-            onClick = onPause,
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA000)) // Naranja
+            onClick = onToggleSimulation,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isSimulating) Color.Red else MaterialTheme.colorScheme.tertiary
+            ),
+            modifier = Modifier.fillMaxWidth(0.7f)
         ) {
-            Text("PAUSE")
+            Text(text = if (isSimulating) "Detener Simulación" else "Simular Wear OS")
         }
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        Button(onClick = onPause) { Text("PAUSE") }
         Button(
             onClick = onStop,
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-        ) {
-            Text("STOP")
-        }
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) { Text("STOP") }
     }
 }
 
@@ -280,146 +204,63 @@ fun SessionPausedContent(
     heartRate: Double,
     elapsedSeconds: Int,
     blockCount: Int,
-    isConnected: Boolean,
-    samplesReceived: Int,
     totalXp: Double,
+    isConnected: Boolean,
     isAutoPaused: Boolean,
+    isSimulating: Boolean,
+    onToggleSimulation: () -> Unit,
     onResume: () -> Unit,
     onStop: () -> Unit
 ) {
-    val pauseColor = if (isAutoPaused) Color(0xFFFFA000) else MaterialTheme.colorScheme.primary
-
     Text(
-        text = if (isAutoPaused) "⏸ Auto-Paused" else "⏸ Paused",
-        style = MaterialTheme.typography.headlineMedium,
-        color = pauseColor
+        text = if (isAutoPaused) "Auto-Paused" else "Session Paused",
+        style = MaterialTheme.typography.headlineSmall,
+        color = Color.Yellow
     )
-
-    if (isAutoPaused) {
-        Text(
-            text = "FC < 110 BPM — reanudará automáticamente",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFFFA000)
-        )
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Text("Sport: ${session.sportType.name}", style = MaterialTheme.typography.bodyLarge)
-    Text("Session: ${session.sessionId.take(8)}...", style = MaterialTheme.typography.bodySmall)
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val connectionColor = if (isConnected) Color.Green else Color.Red
-        val connectionText = if (isConnected) "Watch connected" else "Watch disconnected"
-        Text(
-            text = "●",
-            color = connectionColor,
-            style = MaterialTheme.typography.titleMedium
-        )
-        Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-        Text(
-            text = connectionText,
-            style = MaterialTheme.typography.bodyMedium,
-            color = connectionColor
-        )
-    }
-
-    Spacer(modifier = Modifier.height(16.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        LiveDataCard(
-            label = "Heart Rate",
-            value = if (heartRate > 0) "${heartRate.toInt()}" else "--",
-            unit = "BPM"
-        )
-        LiveDataCard(
-            label = "Time",
-            value = "${elapsedSeconds / 60}:${String.format(Locale.getDefault(), "%02d", elapsedSeconds % 60)}",
-            unit = ""
-        )
-        LiveDataCard(
-            label = "Samples",
-            value = "$samplesReceived",
-            unit = "rcv"
-        )
-    }
-
-    Spacer(modifier = Modifier.height(8.dp))
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        LiveDataCard(
-            label = "Blocks",
-            value = "$blockCount",
-            unit = ""
-        )
-        LiveDataCard(
-            label = "XP",
-            value = String.format(Locale.getDefault(), "%.2f", totalXp),
-            unit = ""
-        )
-    }
+    Text(text = "Sport: ${session.sportType.name}")
 
     Spacer(modifier = Modifier.height(24.dp))
+    Text(
+        text = String.format(Locale.getDefault(), "%02d:%02d", elapsedSeconds / 60, elapsedSeconds % 60),
+        style = MaterialTheme.typography.displayMedium,
+        color = Color.Gray
+    )
 
-    // ← NUEVO: Botones RESUME + STOP
+    Spacer(modifier = Modifier.height(24.dp))
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
+        LiveDataCard(label = "Last HR", value = "${heartRate.toInt()}", unit = "BPM")
+        LiveDataCard(label = "Blocks", value = "$blockCount", unit = "")
+        LiveDataCard(label = "XP Accum.", value = String.format(Locale.getDefault(), "%.1f", totalXp), unit = "XP")
+    }
+
+    Spacer(modifier = Modifier.height(32.dp))
+
+    // REQUISITO: Botón de simulación también en Pausa si es Debug
+    if (BuildConfig.DEBUG) {
         Button(
-            onClick = onResume,
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)) // Verde
+            onClick = onToggleSimulation,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isSimulating) Color.Red else MaterialTheme.colorScheme.tertiary
+            ),
+            modifier = Modifier.fillMaxWidth(0.7f)
         ) {
-            Text("RESUME")
+            Text(text = if (isSimulating) "Detener Simulación" else "Simular Wear OS")
         }
+        Spacer(modifier = Modifier.height(12.dp))
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        Button(onClick = onResume) { Text("RESUME") }
         Button(
             onClick = onStop,
-            modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
-        ) {
-            Text("STOP")
-        }
-    }
-}
-
-@Composable
-fun LiveDataCard(
-    label: String,
-    value: String,
-    unit: String
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.outline
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-        if (unit.isNotEmpty()) {
-            Text(
-                text = unit,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline
-            )
-        }
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+        ) { Text("STOP") }
     }
 }
 
@@ -430,12 +271,7 @@ fun SessionCompletedContent(
     blocksInSession: Int,
     onReset: () -> Unit
 ) {
-    Text(
-        text = "Session Completed!",
-        style = MaterialTheme.typography.headlineMedium,
-        color = Color.Green
-    )
-
+    Text(text = "Session Completed!", style = MaterialTheme.typography.headlineMedium, color = Color.Green)
     Spacer(modifier = Modifier.height(16.dp))
 
     Text("Sport: ${session.sportType.name}")
@@ -445,48 +281,37 @@ fun SessionCompletedContent(
     } ?: "Unknown"}")
 
     Spacer(modifier = Modifier.height(16.dp))
-
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
-        LiveDataCard(
-            label = "Blocks",
-            value = "$blocksInSession",
-            unit = ""
-        )
-        LiveDataCard(
-            label = "XP Gained",
-            value = String.format(Locale.getDefault(), "%.2f", xpGained),
-            unit = "XP"
-        )
+        LiveDataCard(label = "Blocks", value = "$blocksInSession", unit = "")
+        LiveDataCard(label = "XP Gained", value = String.format(Locale.getDefault(), "%.2f", xpGained), unit = "XP")
     }
 
     Spacer(modifier = Modifier.height(32.dp))
-
-    Button(onClick = onReset) {
-        Text("NEW SESSION")
-    }
+    Button(onClick = onReset) { Text("NEW SESSION") }
 }
 
 @Composable
-fun SessionErrorContent(
-    message: String,
-    onRetry: () -> Unit
-) {
-    Text(
-        text = "Error",
-        style = MaterialTheme.typography.headlineMedium,
-        color = MaterialTheme.colorScheme.error
-    )
-
+fun SessionErrorContent(message: String, onRetry: () -> Unit) {
+    Text(text = "Error", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.error)
     Spacer(modifier = Modifier.height(16.dp))
-
-    Text(message)
-
+    Text(text = message, style = MaterialTheme.typography.bodyLarge)
     Spacer(modifier = Modifier.height(32.dp))
+    Button(onClick = onRetry) { Text("RETRY") }
+}
 
-    Button(onClick = onRetry) {
-        Text("RETRY")
+@Composable
+fun LiveDataCard(label: String, value: String, unit: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(text = value, style = MaterialTheme.typography.titleLarge)
+            if (unit.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(2.dp))
+                Text(text = unit, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+        }
     }
 }

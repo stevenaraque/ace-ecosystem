@@ -2,6 +2,17 @@
 -- A.C.E Backend — Script completo para Supabase
 -- Ejecutar en: Supabase Dashboard → SQL Editor → New Query
 -- ============================================================
+--
+-- ⚠️ NOTA (2026-06-25): Este script es una REFERENCIA TEÓRICA del esquema.
+-- La FUENTE DE VERDAD del esquema en producción son las migraciones Flyway en
+-- `ace-backend/src/main/resources/db/migration/` (V1..V6, V10).
+-- Divergencias conocidas entre este script y las migraciones reales:
+--   • `xp_transactions.amount` aquí → la migración/entity real usa la columna `xp_amount`
+--     (mapeo `@Column(name="xp_amount")` en `XpTransaction.kt`). Ver fix C4 en DEUDA_TECNICA_v2.md.
+--   • Este script no incluye las correcciones de V5/V6/V10 (drop `bonus_multiplier`,
+--     PKs de ranking, seed CYCLING/WALKING, `balance_after` BIGINT).
+-- Para crear la BD, preferir `flyway migrate` sobre este script.
+-- ============================================================
 
 -- 0. Extensión UUID (requerida por Supabase)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";

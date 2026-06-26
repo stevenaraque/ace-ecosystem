@@ -1,5 +1,7 @@
 # Reporte de Estado: Sistema 4 (Autenticación JWT Híbrida)
 
+> **Actualización 2026-06-25:** S4 está **100% completo**, incluyendo **F7 (JWT único por dispositivo)**: `AuthService.login`/`register` (`auth/service/AuthService.kt:35,68`) ahora llaman `refreshTokenService.revokeAllUserTokens(...)` antes de emitir el nuevo token. Al entrar desde un dispositivo B, el dispositivo A pierde acceso en su próximo `refresh` (`REFRESH_REVOKED` → `AuthInterceptor` limpia tokens → logout automático). El resto del reporte (pasos 1–9) sigue vigente.
+
 Tras analizar el código actual en el módulo `ace-backend` y compararlo con el **Apéndice S4 (ACE_APPENDIX_S4_Auth.md)** y tu tabla de planificación, este es el diagnóstico del sistema:
 
 ## 1. Estado del Backend (Pasos 1 - 4)

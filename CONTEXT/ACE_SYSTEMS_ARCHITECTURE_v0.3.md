@@ -1,10 +1,12 @@
 # A.C.E — Arquitectura de Sistemas y Responsabilidades por Módulo
 
-> **Estado:** En construcción / Conceptual / WIP  
-> **Versión:** 0.3  
-> **Fecha:** 2026-06-08  
-> **Stack:** Wear OS 3+ · Android 13+ (Java 21) · Spring Boot 4.1.x · PostgreSQL (Neon/Supabase) · SQLite (APK local)  
-> **Nota:** `:shared` v1.0.0 está **IMPLEMENTADO Y PUBLICADO** vía JitPack. Ver §16.
+> **Estado:** En desarrollo (~85% implementado). Los 3 módulos + `:shared` están funcionales.
+> **Versión:** 0.4
+> **Fecha:** 2026-06-25
+> **Stack:** Wear OS 3+ · Android 13+ (Java 21) · Spring Boot 4.0.6 · PostgreSQL (Supabase) · SQLite (APK local)
+> **Nota:** `:shared` v1.0.9 está **IMPLEMENTADO Y PUBLICADO** vía JitPack. Los sistemas S1–S10 están implementados (ver §2 y §16). El estado de deuda técnica está en `DEUDA_TECNICA_v2.md`.
+>
+> **v0.3 → v0.4 (2026-06-25):** Auditoría de código. Los sistemas S1–S10 pasan de "Conceptual" a su estado real (mayoría implementados). `:shared` 1.0.0 → 1.0.9. Bloque = 60s (decisión de equipo). Backend/mobile/wear ya no son "Conceptual" sino ~85% implementados.
 
 ---
 
@@ -26,17 +28,17 @@ A.C.E es un ecosistema de tres nodos con responsabilidades estrictamente separad
 
 | # | Sistema | Descripción en una línea | Estado |
 |---|---------|--------------------------|--------|
-| 1 | **Captura de Sensor** | Del sensor de FC del reloj al buffer del móvil vía Bluetooth. | Conceptual |
-| 2 | **Sesión de Ejercicio** | Ciclo de vida de una actividad: inicio, pausas, bloques, cierre. | Conceptual |
-| 3 | **Sincronización Offline-First** | Cómo la APK guarda, encola y envía datos (crudos + XP calculada) al backend. | Conceptual |
-| 4 | **Autenticación JWT Híbrida** | Tokens de corta y larga duración, rotación, revocación y race conditions. | Conceptual |
-| 5 | **Cálculo de XP y Gamificación** | La APK calcula XP localmente usando fórmulas del backend. Recompensa inmediata offline. | Conceptual |
-| 6 | **Ranking y Posicionamiento** | Clasificación global y municipal, recálculo periódico, cache en APK. | Conceptual |
-| 7 | **Racha (Streaks)** | Hábito diario: detección, incremento, rotura y recordatorios. Controlado por backend. | Conceptual |
-| 8 | **Notificaciones y Recordatorios** | WorkManager, foreground service y engagement del usuario. | Conceptual |
-| 9 | **Historial de Sesiones** | Las últimas 5 sesiones guardadas localmente en la APK, sin discriminar categoría. | Conceptual |
-| 10 | **Estadísticas Persistentes de Perfil** | Datos procesados (con XP) del usuario, sincronizados y cacheados en la APK. | Conceptual |
-| **—** | **:shared (Contrato)** | DTOs, enums, constants, serialización. **IMPLEMENTADO v1.0.0.** | ✅ **LISTO** |
+| 1 | **Captura de Sensor** | Del sensor de FC del reloj al buffer del móvil vía Bluetooth. | 🟢 Implementado |
+| 2 | **Sesión de Ejercicio** | Ciclo de vida de una actividad: inicio, pausas, bloques, cierre. | 🟢 Implementado (~95%) |
+| 3 | **Sincronización Offline-First** | Cómo la APK guarda, encola y envía datos (crudos + XP calculada) al backend. | 🟢 Implementado (~95%) |
+| 4 | **Autenticación JWT Híbrida** | Tokens de corta y larga duración, rotación, revocación y race conditions. | 🟢 Implementado (~100%) |
+| 5 | **Cálculo de XP y Gamificación** | La APK calcula XP localmente usando fórmulas del backend. Recompensa inmediata offline. | 🟢 Implementado (~95%) |
+| 6 | **Ranking y Posicionamiento** | Clasificación global y municipal, recálculo periódico, cache en APK. | 🟢 Implementado (~90%) |
+| 7 | **Racha (Streaks)** | Hábito diario: detección, incremento, rotura y recordatorios. Controlado por backend. | 🟢 Implementado (~95%) |
+| 8 | **Notificaciones y Recordatorios** | WorkManager, foreground service y engagement del usuario. | 🟡 Parcial (~60%) |
+| 9 | **Historial de Sesiones** | Las últimas 5 sesiones guardadas localmente en la APK, sin discriminar categoría. | 🟢 Implementado (~90%) |
+| 10 | **Estadísticas Persistentes de Perfil** | Datos procesados (con XP) del usuario, sincronizados y cacheados en la APK. | 🟡 Implementado (~80%) — M3 pendiente |
+| **—** | **:shared (Contrato)** | DTOs, enums, constants, serialización. **IMPLEMENTADO v1.0.9.** | ✅ **LISTO** |
 
 ---
 
@@ -75,11 +77,11 @@ Agrupar el esfuerzo del usuario en una unidad lógica con inicio, desarrollo y f
 
 ### Flujo de datos
 ```
-Usuario toca INICIAR → APK crea local_session (ACTIVE) 
-→ Wear OS comienza a transmitir FC 
-→ Cada 300s la APK arma un local_block 
-→ Usuario toca DETENER → APK cierra sesión y bloque final 
-→ APK calcula XP del bloque/sesión localmente 
+Usuario toca INICIAR → APK crea local_session (ACTIVE)
+→ Wear OS comienza a transmitir FC
+→ Cada 60s la APK arma un local_block   (decisión de equipo: bloques de 60s, no 300s)
+→ Usuario toca DETENER → APK cierra sesión y bloque final
+→ APK calcula XP del bloque/sesión localmente
 → Todo queda en SQLite esperando sync
 ```
 
@@ -88,7 +90,7 @@ Usuario toca INICIAR → APK crea local_session (ACTIVE)
 | Módulo | Responsabilidad | Qué NO hace |
 |--------|----------------|-------------|
 | **Wear OS** | Mostrar FC en vivo, timer, botón DETENER. Enviar señal STOP al móvil. | No sabe qué sesión pertenece a qué usuario. No inicia sesiones por sí solo. |
-| **APK** | Crear `local_session` con UUID propio. Mantener estado `ACTIVE/PAUSED/COMPLETED`. Acumular FC en buffer de 300s. Generar `block_id` (UUIDv4) por cada bloque. Asociar bloques a sesión. **Calcular XP del bloque localmente** usando fórmulas cacheadas. Mostrar recompensa inmediata al usuario. | No valida si la sesión es legítima (eso es backend). No envía bloques inmediatamente (espera batch). |
+| **APK** | Crear `local_session` con UUID propio. Mantener estado `ACTIVE/PAUSED/COMPLETED`. Acumular FC en buffer de 60s. Generar `block_id` (UUIDv4) por cada bloque. Asociar bloques a sesión. **Calcular XP del bloque localmente** usando fórmulas cacheadas. Mostrar recompensa inmediata al usuario. | No valida si la sesión es legítima (eso es backend). No envía bloques inmediatamente (espera batch). |
 | **Backend** | Aceptar o rechazar sesiones. **Solo 1 sesión ACTIVE por usuario.** Si llega una nueva, aborta la anterior. Validar que bloques pertenezcan a sesión existente. | No inicia sesiones remotamente (solo puede enviar STOP). No recalcula XP. |
 | **DB** | Guardar `exercise_sessions` y `exercise_blocks`. Relación 1:N. | No calcula duraciones ni valida métricas. |
 | **:shared** | Define `ExerciseBlockDto`, `SessionStatus` enum, `XpConstants.BLOCK_DURATION_SECONDS`. **Disponible vía JitPack.** | No ejecuta código. Es contrato. |
@@ -96,7 +98,7 @@ Usuario toca INICIAR → APK crea local_session (ACTIVE)
 ### Decisiones tomadas
 - `block_id` lo genera el **móvil**, no el backend. Esto permite reenvío idempotente.
 - `timestamp_start` del bloque es la fuente de verdad temporal (no `server_received_at`).
-- Un bloque debe durar ~300 segundos (±10%). Fuera de ese rango = rechazo `422`.
+- Un bloque dura **~60 segundos** (decisión de equipo, reescrita desde 300s). El backend acepta bloques de `MIN_DURATION=10s` a `MAX_DURATION=330s`. Fuera de ese rango = rechazo `422`.
 - **:shared** define el schema del bloque (`ExerciseBlockDto`) que viaja en el batch. Backend y mobile usan la misma clase vía JitPack.
 
 ---
@@ -389,7 +391,7 @@ APK calcula XP de un bloque
 - **Racha (Streak):** Días consecutivos con al menos 1 bloque válido. Controlada por backend.
 - **Historial Local:** Últimas 5 sesiones en SQLite de la APK, sin discriminar categoría, datos raw.
 - **Estadísticas de Perfil:** Datos procesados (con XP) del usuario, sincronizados APK ↔ Backend.
-- **:shared:** Módulo Kotlin JVM con DTOs, enums, constantes. **Repo separado** `reinaldojperalta/ace-shared`. **Publicado vía JitPack** como `com.github.reinaldojperalta:ace-shared:1.0.0`.
+- **:shared:** Módulo Kotlin JVM con DTOs, enums, constantes. **Repo separado** `reinaldojperalta/ace-shared`. **Publicado vía JitPack** como `com.github.reinaldojperalta:ace-shared:1.0.9`.
 
 ### Estados de Bloque (APK)
 - `PENDING` → `SYNCING` → `SYNCED`
@@ -419,7 +421,7 @@ APK calcula XP de un bloque
 | Historial local | **5 sesiones, sin discriminar categoría** | Vista rápida offline. Datos raw. |
 | Estadísticas de perfil | **APK calcula, backend valida** | Progreso visible inmediatamente. Sincronización eventual. |
 | Wear OS | **NO `:shared`, NO Room** | Reduce APK del reloj. Primitivos JSON por DataClient. |
-| **:shared** | **Repo separado, JitPack** | `reinaldojperalta/ace-shared`. Compilación automática por tag. Coordenada: `com.github.reinaldojperalta:ace-shared`. **v1.0.0 IMPLEMENTADO.** | Contrato inmutable entre backend y mobile. Sin fricción de JAR manual ni monorepo mixto. |
+| **:shared** | **Repo separado, JitPack** | `reinaldojperalta/ace-shared`. Compilación automática por tag. Coordenada: `com.github.reinaldojperalta:ace-shared`. **v1.0.9 IMPLEMENTADO.** | Contrato inmutable entre backend y mobile. Sin fricción de JAR manual ni monorepo mixto. |
 
 ---
 
@@ -475,10 +477,10 @@ APK calcula XP de un bloque
 
 | Módulo | Estado | Versión | Publicación | Notas |
 |--------|--------|---------|-------------|-------|
-| **:shared** | ✅ **IMPLEMENTADO** | 1.0.0 | JitPack | 40 archivos, 17 tests pasando. Kotlin 2.2.21, Gson 2.11.0, kotlinx-serialization 1.8.0. |
-| **ace-backend** | 🔄 Conceptual | — | — | Depende de `:shared` vía JitPack. Pendiente scaffold Spring Boot 4.0.6. |
-| **ace-mobile** | 🔄 Conceptual | — | — | Depende de `:shared` vía JitPack. Pendiente scaffold AGP 9.0.1. |
-| **ace-wear** | 🔄 Conceptual | — | — | NO consume `:shared`. Paths hardcodeados como strings literales. |
+| **:shared** | ✅ **IMPLEMENTADO** | 1.0.9 | JitPack | DTOs, enums, constantes, serialización. Consumido por backend, mobile (y wear en modo híbrido). |
+| **ace-backend** | 🟢 En desarrollo (~85%) | 1.0.9 (`:shared`) | Render (Dockerfile) | S1–S10 implementados (S4 completo; S2/S3/S5/S6/S7/S9/S10 funcionales). Deuda: M3 (OfficialStatsDto). Ver `DEUDA_TECNICA_v2.md`. |
+| **ace-mobile** | 🟢 En desarrollo (~85%) | 1.0.9 (`:shared`) | APK | S1–S10 implementados; F1–F7 completos. Deuda menor: limpieza de código muerto. Ver `DEUDA_TECNICA_v2.md`. |
+| **ace-wear** | 🟢 En desarrollo (~100% HU-06) | híbrido (`:shared`) | APK | Captura + transmisión + UI completas. `:shared` híbrido (enums/constants, sin DTOs). |
 
 ### Cómo consumir `:shared` (backend)
 
@@ -490,7 +492,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.9")
 }
 ```
 
@@ -505,7 +507,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.reinaldojperalta:ace-shared:1.0.0")
+    implementation("com.github.reinaldojperalta:ace-shared:1.0.9")
 }
 ```
 
