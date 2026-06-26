@@ -116,18 +116,20 @@ fun SessionScreen(
 fun SessionIdleContent(onStartSession: (SportType) -> Unit) {
     Text(text = "Start a New Workout", style = MaterialTheme.typography.headlineMedium)
     Spacer(modifier = Modifier.height(24.dp))
-    Button(
-        onClick = { onStartSession(SportType.RUNNING) },
-        modifier = Modifier.fillMaxWidth(0.7f)
+
+    // MUESTRA AUTOMÁTICAMENTE TODOS LOS DEPORTES DISPONIBLES EN TU ENUM SPORTTYPE
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("RUNNING")
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    Button(
-        onClick = { onStartSession(SportType.CYCLING) },
-        modifier = Modifier.fillMaxWidth(0.7f)
-    ) {
-        Text("CYCLING")
+        SportType.values().forEach { sport ->
+            Button(
+                onClick = { onStartSession(sport) },
+                modifier = Modifier.fillMaxWidth(0.7f)
+            ) {
+                Text(sport.name)
+            }
+        }
     }
 }
 

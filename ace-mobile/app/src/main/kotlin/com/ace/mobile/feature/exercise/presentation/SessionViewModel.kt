@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import sena.adso.ace_mobile.BuildConfig
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -105,20 +104,20 @@ class SessionViewModel @Inject constructor(
     }
 
     private fun observeBlockCountAndXp() {
-        // SOLUCIÓN A LOS ERRORES DE LECTURA DEL BUFFER:
-        // Si sessionSampleBuffer ya expone flujos individuales o propiedades directas de bloques/xp:
+        // REFACTOR reactivo para escuchar al Buffer o realizar Pooling dinámico preciso durante la sesión activa
         viewModelScope.launch {
-            // Escuchamos el cambio de bloques de forma genérica o mediante un polling reactivo continuo seguro
             while (true) {
-                try {
-                    // Adaptado para evitar referencias caídas a closedBlocksFlow
-                    val currentBlocks = blockRepository.getBlocksBySession(_currentSession.value?.sessionId ?: "")
-                    _blockCount.value = currentBlocks.size
-                    _totalXp.value = currentBlocks.sumOf { (it.xpCalculated ?: 0).toDouble() }
-                } catch (e: Exception) {
-                    // No hay sesión activa aún
+                val currentSessionId = _currentSession.value?.sessionId
+                if (!currentSessionId.isNullOrEmpty() && _uiState.value is SessionUiState.Active) {
+                    try {
+                        val currentBlocks = blockRepository.getBlocksBySession(currentSessionId)
+                        _blockCount.value = currentBlocks.size
+                        _totalXp.value = currentBlocks.sumOf { (it.xpCalculated ?: 0).toDouble() }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error leyendo bloques actuales de base de datos", e)
+                    }
                 }
-                delay(2000L) // Actualiza de forma segura cada 2 segundos
+                delay(1000L) // Polling rápido cada segundo para actualizar la UI con los bloques e XP simulados
             }
         }
     }
@@ -220,9 +219,6 @@ class SessionViewModel @Inject constructor(
                     xpGained = totalXp,
                     blocksInSession = totalBlocks
                 )
-
-                // SOLUCIÓN AL ERROR DE startSync: Se eliminó la llamada directa ausente
-                Log.i(TAG, "Sesión finalizada con éxito y guardada de forma local.")
             } catch (e: Exception) {
                 _uiState.value = SessionUiState.Completed(session = session)
             }
@@ -230,7 +226,7 @@ class SessionViewModel @Inject constructor(
     }
 
     fun toggleSimulation() {
-        if (BuildConfig.DEBUG) {
+        if (sena.adso.ace_mobile.BuildConfig.DEBUG) {
             val newState = !_isSimulating.value
             receiveWearDataUseCase.toggleSimulation(newState)
         }
@@ -241,7 +237,7 @@ class SessionViewModel @Inject constructor(
         stopTimeoutJob = null
         stopTimer()
 
-        if (BuildConfig.DEBUG) {
+        if (sena.adso.ace_mobile.BuildConfig.DEBUG) {
             receiveWearDataUseCase.toggleSimulation(false)
         }
 
@@ -278,7 +274,7 @@ class SessionViewModel @Inject constructor(
         super.onCleared()
         stopTimeoutJob?.cancel()
         stopTimer()
-        if (BuildConfig.DEBUG) {
+        if (sena.adso.ace_mobile.BuildConfig.DEBUG) {
             receiveWearDataUseCase.toggleSimulation(false)
         }
     }
