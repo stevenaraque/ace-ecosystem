@@ -39,7 +39,7 @@ class RankingQueryService {
                 u.username,
                 u.nickname,
                 COALESCE(SUM(x.xp_amount), 0) as total_xp
-            FROM user_profile u
+            FROM user_profiles u
             LEFT JOIN xp_transactions x ON u.user_id = x.user_id
             GROUP BY u.user_id, u.username, u.nickname
             ORDER BY total_xp DESC
@@ -87,7 +87,7 @@ class RankingQueryService {
                 u.username,
                 u.nickname,
                 COALESCE(SUM(x.xp_amount), 0) as total_xp
-            FROM user_profile u
+            FROM user_profiles u
             LEFT JOIN xp_transactions x ON u.user_id = x.user_id
             WHERE u.city_id = :cityId
             GROUP BY u.user_id, u.username, u.nickname
