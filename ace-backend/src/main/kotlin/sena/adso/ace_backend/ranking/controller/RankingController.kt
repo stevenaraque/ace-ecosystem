@@ -5,21 +5,23 @@ import mu.KotlinLogging
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import sena.adso.ace_backend.ranking.service.RankingQueryService
-import sena.adso.ace_backend.ranking.service.RankingRecalculationJob
 import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * FIXME-MVP-HACK: Endpoints de ranking son públicos (permitAll) y on-demand.
+ * El recálculo batch y las tablas materializadas (ranking_global / ranking_municipal)
+ * quedan obsoletos para este MVP. Ver RankingRecalculationJob.kt @Deprecated.
+ */
 @RestController
 @RequestMapping("/api/ranking")
 class RankingController(
-    private val rankingQueryService: RankingQueryService,
-    private val rankingRecalculationJob: RankingRecalculationJob
+    private val rankingQueryService: RankingQueryService
 ) {
 
     @GetMapping("/global")
@@ -36,26 +38,6 @@ class RankingController(
         val userId = getCurrentUserId()
         logger.info { "GET /api/ranking/municipal?cityId=$cityId for user $userId" }
         return ResponseEntity.ok(rankingQueryService.getMunicipalRanking(userId, cityId))
-    }
-
-    @PostMapping("/recalculate")
-    fun forceRecalculation(): ResponseEntity<Map<String, String>> {
-        val userId = getCurrentUserId()
-        logger.info { "POST /api/ranking/recalculate triggered by user $userId" }
-
-        val start = System.currentTimeMillis()
-        rankingRecalculationJob.recalculateRankings()
-        val elapsed = System.currentTimeMillis() - start
-
-        logger.info { "Manual recalculation completed in ${elapsed}ms" }
-
-        return ResponseEntity.ok(
-            mapOf(
-                "status" to "success",
-                "message" to "Ranking recalculated successfully",
-                "elapsedMs" to elapsed.toString()
-            )
-        )
     }
 
     private fun getCurrentUserId(): UUID {

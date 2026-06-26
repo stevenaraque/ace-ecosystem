@@ -23,7 +23,8 @@ class SecurityConfig(
             .authorizeHttpRequests { auth ->
                 auth
                     .requestMatchers("/api/auth/**").permitAll()
-                    .requestMatchers("/api/xp/formulas").permitAll()  // ← FIX: Fórmulas públicas
+                    .requestMatchers("/api/xp/formulas").permitAll()
+                    .requestMatchers("/api/ranking/**").permitAll()  // ← MVP-HACK: Ranking público on-demand
                     .requestMatchers("/actuator/**").permitAll()
                     .anyRequest().authenticated()
             }

@@ -18,6 +18,17 @@ import java.util.UUID
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * FIXME-MVP-OBSOLETO: Este job batch queda deshabilitado para el MVP.
+ * El ranking ahora se calcula on-demand en RankingQueryService via SQL nativo.
+ * 
+ * Conservado por si en el futuro se vuelve a tablas materializadas
+ * (por ejemplo, con >10,000 usuarios).
+ */
+@Deprecated(
+    message = "Reemplazado por ranking on-demand en RankingQueryService. No usar en MVP.",
+    replaceWith = ReplaceWith("RankingQueryService")
+)
 @Component
 class RankingRecalculationJob(
     private val xpTransactionRepository: XpTransactionRepository,
@@ -28,10 +39,15 @@ class RankingRecalculationJob(
     private val municipalFilterService: MunicipalFilterService
 ) {
 
-    @Scheduled(cron = RankingConstants.RANKING_RECALCULATION_CRON)
+    /**
+     * FIXME-MVP: Comentado para evitar que corra en Render free tier.
+     * El spin-down de Render mata la JVM y el job nunca se dispara.
+     * Si se reactiva, requiere plan pago o Cron Job separado.
+     */
+    // @Scheduled(cron = RankingConstants.RANKING_RECALCULATION_CRON)
     @Transactional
     fun recalculateRankings() {
-        logger.info { "=== START RankingRecalculationJob at ${LocalDateTime.now()} ===" }
+        logger.info { "=== START RankingRecalculationJob (OBSOLETO) at ${LocalDateTime.now()} ===" }
 
         try {
             val xpByUser = xpTransactionRepository.findAll()

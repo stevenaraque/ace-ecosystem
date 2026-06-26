@@ -7,6 +7,15 @@ import org.springframework.stereotype.Repository
 import sena.adso.ace_backend.ranking.model.RankingGlobal
 import java.util.UUID
 
+/**
+ * FIXME-MVP-OBSOLETO: Repositorio de tabla materializada ranking_global.
+ * El ranking ahora se calcula on-demand en RankingQueryService.
+ * Conservado para posible reactivación futura con tablas materializadas.
+ */
+@Deprecated(
+    message = "Reemplazado por ranking on-demand. No usar en MVP.",
+    replaceWith = ReplaceWith("RankingQueryService")
+)
 @Repository
 interface RankingGlobalRepository : JpaRepository<RankingGlobal, UUID> {
 

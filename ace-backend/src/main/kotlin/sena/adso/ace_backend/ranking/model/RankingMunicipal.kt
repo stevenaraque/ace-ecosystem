@@ -4,6 +4,16 @@ import jakarta.persistence.*
 import java.time.LocalDateTime
 import java.util.UUID
 
+/**
+ * FIXME-MVP-OBSOLETO: Entity de tabla materializada ranking_municipal.
+ * El ranking ahora se calcula on-demand via SQL nativo en RankingQueryService.
+ * La tabla queda en PostgreSQL pero no se lee ni escribe desde código.
+ * Conservada para posible reactivación futura con job batch.
+ */
+@Deprecated(
+    message = "Reemplazado por ranking on-demand. No usar en MVP.",
+    replaceWith = ReplaceWith("Consulta directa a xp_transactions + user_profile")
+)
 @Entity
 @Table(name = "ranking_municipal")
 data class RankingMunicipal(
