@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     composable("session_screen_route") {
                         val currentUserId = currentUser?.userId
                         if (currentUserId != null) {
-                            SessionScreen(userId = currentUserId)
+                            SessionScreen(userId = currentUserId, navController = navController)
                         } else {
                             navController.navigate("login_screen_route") {
                                 popUpTo("session_screen_route") { inclusive = true }
@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity() {
 
                     // RUTA D: Ranking
                     composable("ranking_screen_route") {
-                        RankingScreen()
+                        RankingScreen(navController = navController)
                     }
 
                     // RUTA E: Perfil
