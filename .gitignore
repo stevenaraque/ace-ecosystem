@@ -15,7 +15,7 @@
 **/*.iml
 **/.vscode/
 nul
-/CONTEXT/
+
 
 # OS
 .DS_Store
