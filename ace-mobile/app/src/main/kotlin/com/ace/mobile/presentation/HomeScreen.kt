@@ -199,8 +199,8 @@ fun HomeScreen(
                     ShortcutData("Estadísticas", Icons.Default.Menu) {
                         navController.navigate("stats_screen_route")
                     },
-                    ShortcutData("Historial", Icons.Default.DateRange) { /* TODO */ },
-                    ShortcutData("Reloj", Icons.Default.AddCircle) { /* TODO */ }
+                    ShortcutData("PROXIMAMENTE", Icons.Default.DateRange) { /* TODO */ },
+                    ShortcutData("PROXIMAMENTE", Icons.Default.AddCircle) { /* TODO */ }
                 )
 
                 Column(
